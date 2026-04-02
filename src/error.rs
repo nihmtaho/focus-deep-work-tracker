@@ -1,0 +1,28 @@
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum FocusError {
+    #[error("No active session to stop.")]
+    NoActiveSession,
+
+    #[error("Session already running: \"{task}\" — elapsed: {elapsed}")]
+    AlreadyRunning { task: String, elapsed: String },
+
+    #[error("Task description cannot be empty.")]
+    EmptyTask,
+
+    #[error("--limit must be a positive integer.")]
+    InvalidLimit,
+
+    #[error("--format must be one of: json, markdown.")]
+    InvalidFormat,
+
+    #[error("Data file is corrupted or unreadable: {path}")]
+    DataFileCorrupted { path: String },
+
+    #[error(transparent)]
+    Db(#[from] rusqlite::Error),
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+}
