@@ -18,7 +18,8 @@ pub fn open_db() -> Result<Connection> {
     })?;
 
     conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS sessions (
+        "PRAGMA journal_mode=WAL;
+        CREATE TABLE IF NOT EXISTS sessions (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
             task       TEXT    NOT NULL,
             tag        TEXT,
