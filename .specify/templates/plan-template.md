@@ -31,7 +31,18 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+Evaluate each principle from `.specify/memory/constitution.md` v1.0.0:
+
+| Principle | Gate question | Status |
+|---|---|---|
+| I. Single Binary | Does this feature require a second binary, daemon, or system dependency? | [PASS / VIOLATION] |
+| II. Test-First | Are tests planned before implementation tasks in tasks.md? | [PASS / VIOLATION] |
+| III. Structured Error Handling | Do all error paths use `anyhow::Result` + `FocusError` variants? | [PASS / VIOLATION] |
+| IV. Color-Independent Output | Is output readable without color? TTY detection confirmed? | [PASS / VIOLATION] |
+| V. Data Safety | Is WAL mode enabled on DB open? Is `DataFileCorrupted` surfaced on failure? | [PASS / VIOLATION] |
+| VI. Commit Hygiene | No Co-Authored-By AI attribution in planned commits? | [PASS / VIOLATION] |
+
+Document any VIOLATION in the Complexity Tracking table below with justification.
 
 ## Project Structure
 

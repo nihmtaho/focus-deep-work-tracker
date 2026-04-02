@@ -245,7 +245,13 @@ With multiple developers:
 - [P] tasks = different files, no dependencies
 - [Story] label maps task to specific user story for traceability
 - Each user story should be independently completable and testable
-- Verify tests fail before implementing
-- Commit after each task or logical group
+- **TDD (NON-NEGOTIABLE, Principle II)**: Test tasks MUST appear before their
+  implementation tasks. Tests MUST be confirmed failing before implementation begins.
+  No task is complete if tests were written after or skipped.
+- **WAL mode (Principle V)**: Any task that opens a SQLite connection MUST include
+  `PRAGMA journal_mode=WAL` immediately after `Connection::open`.
+- **No AI attribution (Principle VI)**: Commit messages MUST NOT include
+  `Co-Authored-By` AI attribution lines.
+- Commit after each checkpoint; run `cargo clippy -- -D warnings` + `cargo fmt` first
 - Stop at any checkpoint to validate story independently
 - Avoid: vague tasks, same file conflicts, cross-story dependencies that break independence

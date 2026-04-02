@@ -1,50 +1,155 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+SYNC IMPACT REPORT
+==================
+Version change: [unversioned template] → 1.0.0
+Bump rationale: MINOR — initial ratification; all placeholder tokens replaced with
+  project-specific principles. No prior version existed.
+
+Modified principles:
+  [PRINCIPLE_1_NAME] → I. Single Binary
+  [PRINCIPLE_2_NAME] → II. Test-First (NON-NEGOTIABLE)
+  [PRINCIPLE_3_NAME] → III. Structured Error Handling
+  [PRINCIPLE_4_NAME] → IV. Color-Independent Output
+  [PRINCIPLE_5_NAME] → V. Data Safety
+  (new)              → VI. Commit Hygiene
+
+Added sections:
+  - Technology Stack (replaces [SECTION_2_NAME])
+  - Development Workflow (replaces [SECTION_3_NAME])
+
+Removed sections: none
+
+Templates updated:
+  ✅ .specify/templates/plan-template.md — Constitution Check gates added
+  ✅ .specify/templates/tasks-template.md — TDD enforcement note + WAL mode note added
+  ✅ .specify/memory/constitution.md — this file
+  ⚠ .specify/templates/spec-template.md — no structural change needed;
+      TDD constraint is enforced at the tasks layer, not spec layer
+
+Deferred TODOs: none
+-->
+
+# Focus Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Single Binary
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+The `focus` tool MUST be distributed as a single self-contained binary with no
+runtime dependencies. It MUST be buildable with `cargo build --release` alone and
+MUST run on macOS and Linux (x86_64, aarch64) without any pre-installed system
+libraries (SQLite is statically bundled via `rusqlite bundled` feature).
+No daemon, no network requirement, no root/sudo.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+**Rationale**: Developer tools that require system dependencies or background processes
+create friction and deployment complexity. A single binary is the gold standard for
+CLI tool distribution.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### II. Test-First (NON-NEGOTIABLE)
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+TDD is mandatory for all features. The workflow MUST follow:
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+1. Write tests → confirm they **fail**
+2. Get explicit sign-off before implementing
+3. Implement until tests **pass**
+4. Refactor under green tests
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+Unit tests live inline (`#[cfg(test)]`) or in `tests/unit/`.
+Integration tests live in `tests/integration/` and use a temporary SQLite file
+(never `~/.local/share/focus/focus.db`) for full isolation.
+No task may be marked complete if its tests were written after or skipped.
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+**Rationale**: Tests written after the fact verify nothing about design. The
+Red-Green-Refactor cycle is the only reliable way to validate behaviour contracts.
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+### III. Structured Error Handling
+
+All fallible operations MUST use `anyhow::Result` for propagation.
+User-facing errors MUST be printed to **stderr** in the format `Error: <message>`.
+Domain errors MUST be defined as typed variants in a `FocusError` enum using
+`thiserror`. Panic is forbidden except in `expect()` calls on invariants that
+are statically guaranteed by construction (e.g., hard-coded valid time values).
+
+**Rationale**: Mixing ad-hoc string errors with structured errors makes CLI output
+unpredictable and breaks scripting. A typed error enum provides exhaustive handling
+and clear user messages at a single exit point.
+
+### IV. Color-Independent Output
+
+All terminal output MUST be fully readable without color. Color MAY be added as
+a visual enhancement, but MUST be automatically disabled when:
+
+- stdout is not a TTY (piped, redirected)
+- The `NO_COLOR` environment variable is set (any value)
+
+The `colored` crate's automatic TTY detection satisfies this. Tests MUST verify
+that `NO_COLOR=1 focus <cmd>` produces no ANSI escape codes.
+
+**Rationale**: CLI output is often captured, diffed, logged, or read in environments
+without color support (CI logs, `less`, accessibility tools). Color-only signalling
+is an accessibility and scripting hazard.
+
+### V. Data Safety
+
+The SQLite database at `~/.local/share/focus/focus.db` MUST be opened with
+**WAL (Write-Ahead Logging) mode** enabled (`PRAGMA journal_mode=WAL`).
+This ensures:
+
+- Concurrent reads are never blocked by writes
+- A crash during write leaves the database in a consistent state
+- No data loss on unexpected process termination
+
+The data directory MUST be created automatically on first run via
+`std::fs::create_dir_all`. Any failure to open or migrate the database MUST
+surface as `FocusError::DataFileCorrupted` with the full absolute path.
+
+**Rationale**: Developers trust a local tool to never corrupt their session history.
+WAL mode is the minimum bar for SQLite durability in a single-writer tool.
+
+### VI. Commit Hygiene
+
+Commit messages MUST NOT include AI model attribution lines such as
+`Co-Authored-By: Claude <noreply@anthropic.com>` or any equivalent.
+Commits MUST be authored solely under the developer's identity.
+
+**Rationale**: AI attribution in commit history creates ambiguity about code
+ownership, pollutes `git log`, and is not relevant to the repository's change record.
+
+## Technology Stack
+
+- **Language**: Rust stable (1.77+)
+- **CLI parsing**: `clap 4` with derive API
+- **Database**: `rusqlite 0.31` with `bundled` feature; WAL mode enabled (Principle V)
+- **Time**: `chrono 0.4` with serde feature; all timestamps stored as Unix epoch
+  integers (UTC); display converted to local time where appropriate
+- **Error handling**: `anyhow 1` + `thiserror 1` (Principle III)
+- **Output color**: `colored 2` with automatic TTY detection (Principle IV)
+- **Home directory**: `dirs 5`
+- **Serialization**: `serde 1` + `serde_json 1`
+
+New dependencies MUST be justified against this list. Introducing a dependency
+that duplicates existing crate functionality requires a Complexity Tracking entry
+in `plan.md`.
+
+## Development Workflow
+
+- **Branch naming**: `###-short-description` (e.g., `001-focus-cli-tracker`)
+- **Commit messages**: imperative mood, present tense; no AI attribution (Principle VI)
+- **Phase gates**: Setup → Foundational → User Stories → Polish; no story work
+  begins before Foundational phase is complete and `cargo build` passes
+- **Checkpoints**: `cargo build`, `cargo clippy -- -D warnings`, and
+  `cargo test` MUST pass at every phase checkpoint before proceeding
+- **Formatting**: `cargo fmt` MUST be run before any checkpoint commit
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+This constitution supersedes all other project practices. Amendments require:
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+1. A clear rationale describing which principle is being added, changed, or removed
+2. A version bump per semantic versioning (MAJOR/MINOR/PATCH as defined in the
+   Sync Impact Report header)
+3. Propagation to all affected templates via the `/speckit.constitution` command
+4. All PRs and plan reviews MUST include a Constitution Check section confirming
+   no violations (or documenting justified exceptions in `plan.md` Complexity Tracking)
+
+**Version**: 1.0.0 | **Ratified**: 2026-04-02 | **Last Amended**: 2026-04-02
