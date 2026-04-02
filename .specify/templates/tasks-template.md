@@ -252,6 +252,9 @@ With multiple developers:
   `PRAGMA journal_mode=WAL` immediately after `Connection::open`.
 - **No AI attribution (Principle VI)**: Commit messages MUST NOT include
   `Co-Authored-By` AI attribution lines.
+- **PR Standards (Principle VII)**: When creating PRs, use `gh pr create` with
+  `.github/PULL_REQUEST_TEMPLATE.md` format. PR title MUST follow `[feat|fix|refactor|chore]: description`.
+  Link to spec.md and tasks.md in PR description. Include test plan with ≥2 manual steps.
 - Commit after each checkpoint; run `cargo clippy -- -D warnings` + `cargo fmt` first
 - Stop at any checkpoint to validate story independently
 - Avoid: vague tasks, same file conflicts, cross-story dependencies that break independence
