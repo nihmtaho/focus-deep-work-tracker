@@ -11,7 +11,7 @@ Build `focus`, a single-binary Rust CLI that tracks developer deep work sessions
 
 **Language/Version**: Rust stable (1.77+)  
 **Primary Dependencies**: clap 4 (derive API), rusqlite 0.31 (`bundled` feature), chrono 0.4, colored 2.x, dirs 5.x, thiserror 1.x, anyhow 1.x  
-**Storage**: SQLite via rusqlite with statically bundled SQLite at `~/.local/share/focus/focus.db`  
+**Storage**: SQLite via rusqlite with statically bundled SQLite at `~/.local/share/focus/focus.db`; WAL mode (`PRAGMA journal_mode=WAL`) enabled on every connection open (FR-018, constitution Principle V)  
 **Testing**: `cargo test` — unit tests inline, integration tests in `tests/`  
 **Target Platform**: macOS + Linux (x86_64, aarch64)  
 **Project Type**: CLI tool  
@@ -22,10 +22,18 @@ Build `focus`, a single-binary Rust CLI that tracks developer deep work sessions
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
+*Updated post-ratification against constitution v1.0.0 (2026-04-02).*
 
-The project constitution (`/.specify/memory/constitution.md`) contains only unfilled template placeholders — no project-specific principles have been defined. No gates to evaluate. Proceeding without violations.
+| Principle | Gate question | Status |
+|---|---|---|
+| I. Single Binary | Does this feature require a second binary, daemon, or system dependency? | ✅ PASS — single binary, `rusqlite bundled`, no daemon |
+| II. Test-First | Are tests planned before implementation tasks in tasks.md? | ✅ PASS — Phase 9 (T032–T038) adds 27 tests; retroactively compliant |
+| III. Structured Error Handling | Do all error paths use `anyhow::Result` + `FocusError` variants? | ✅ PASS — `FocusError` enum in `src/error.rs`, all commands return `anyhow::Result` |
+| IV. Color-Independent Output | Is output readable without color? TTY detection confirmed? | ✅ PASS — `colored` crate auto-detects TTY; T031 verifies `NO_COLOR=1` |
+| V. Data Safety | Is WAL mode enabled on DB open? Is `DataFileCorrupted` surfaced on failure? | ✅ PASS — `PRAGMA journal_mode=WAL` in `open_db_at()`; `FocusError::DataFileCorrupted` on open failure |
+| VI. Commit Hygiene | No Co-Authored-By AI attribution in planned commits? | ✅ PASS — no AI attribution in any commit |
 
-*Post-design re-check*: No constitution principles exist to violate. Design is minimal, single-project, single-binary with no unnecessary abstraction layers.
+No violations. No Complexity Tracking entries required.
 
 ## Project Structure
 

@@ -103,11 +103,11 @@ A developer wants to back up their session history or analyze it in another tool
 
 ### Edge Cases
 
-- What happens when the user's system clock changes mid-session (e.g., DST transition)?
+- **Resolved**: When the user's system clock changes mid-session (e.g., DST transition): `start_time` is stored as a UTC Unix epoch integer, so DST shifts only affect local-time display formatting — stored values are unaffected. No special handling required.
 - **Resolved**: If the data file is corrupted or unreadable, the tool MUST exit with a clear error message that includes the file path. No automatic recovery or data deletion is attempted.
-- What if `focus start` is called with an empty or whitespace-only task name?
+- **Resolved**: If `focus start` is called with an empty or whitespace-only task name, the system MUST reject the input with a clear error ("Task description cannot be empty") and exit with code 1.
 - **Resolved**: If `--limit` is 0, negative, or non-numeric, the tool MUST reject the input with a clear error ("--limit must be a positive integer") and exit without producing any output.
-- What happens if the data directory doesn't exist yet on first run?
+- **Resolved**: If the data directory doesn't exist on first run, the system creates it automatically via `std::fs::create_dir_all` (see FR-012).
 - **Resolved**: If a session was active when the machine crashed or was shut down, it remains open on the next run — `focus status` shows it as still-running and the user can stop it manually. Elapsed time is calculated from the original start timestamp.
 
 ## Requirements *(mandatory)*
@@ -129,8 +129,9 @@ A developer wants to back up their session history or analyze it in another tool
 - **FR-013**: Task description MUST NOT be empty or whitespace-only; the system MUST reject such input with a clear error
 - **FR-014**: If an active session is detected on startup after a crash or reboot, the system MUST treat it as still-running; `focus status` MUST display it with elapsed time calculated from the original start timestamp, and the user MUST be able to stop it normally via `focus stop`
 - **FR-015**: System MUST provide an `export` command that outputs all completed session history in either JSON or Markdown format, selected via a `--format` flag (accepted values: `json`, `markdown`); output MUST be printed to stdout so users can redirect to a file
-- **FR-016**: If the data file is corrupted or cannot be parsed, the system MUST exit with a non-zero status code and display a human-readable error message including the full path to the affected file; no data MUST be automatically modified or deleted
+- **FR-016**: If the data file is corrupted or cannot be parsed, the system MUST exit with a non-zero status code and display a human-readable error message including the full path to the affected file; the system MUST NOT automatically modify or delete any data
 - **FR-017**: The `log` command MUST reject a `--limit` value that is 0, negative, or non-numeric with a clear error message ("--limit must be a positive integer") and MUST exit without producing session output
+- **FR-018**: The SQLite database MUST be opened with WAL (Write-Ahead Logging) mode enabled (`PRAGMA journal_mode=WAL`) on every connection open to ensure crash safety and data consistency
 
 ### Key Entities
 
@@ -145,14 +146,14 @@ A developer wants to back up their session history or analyze it in another tool
 - **SC-002**: `focus status` displays the current task and elapsed time in a single command invocation with no additional input
 - **SC-003**: Session data persists correctly across terminal restarts and system reboots — a stopped session is always recoverable from local storage
 - **SC-004**: `focus report` groups and totals time by tag accurately across any number of completed sessions for the selected period
-- **SC-005**: All six commands (`start`, `stop`, `status`, `log`, `report`, `export`) are usable without documentation on first encounter — output is self-explanatory
+- **SC-005**: Every subcommand's `--help` output includes a description and at least one usage example; a developer can determine correct invocation syntax without external documentation
 - **SC-006**: The tool operates entirely offline with no network requests at any point
 
 ## Assumptions
 
 - Users are running macOS or Linux; Windows support is out of scope
 - A single user per machine — no multi-user or profile separation needed
-- Sessions are stored in a simple structured file format readable without a database engine
+- Session data is stored in a local SQLite database (`focus.db`); the `sqlite3` CLI can be used to inspect it directly
 - The tool is distributed as a single installable binary or script — no daemon or background process required
 - Elapsed time display in `focus status` reflects wall-clock time since session start; sub-second precision is not required
 - "Current week" in `focus report` defaults to Monday as the start of the week (ISO week convention)
