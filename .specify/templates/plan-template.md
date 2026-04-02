@@ -31,7 +31,7 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-Evaluate each principle from `.specify/memory/constitution.md` v1.0.0:
+Evaluate each principle from `.specify/memory/constitution.md` v1.1.0:
 
 | Principle | Gate question | Status |
 |---|---|---|
@@ -41,6 +41,7 @@ Evaluate each principle from `.specify/memory/constitution.md` v1.0.0:
 | IV. Color-Independent Output | Is output readable without color? TTY detection confirmed? | [PASS / VIOLATION] |
 | V. Data Safety | Is WAL mode enabled on DB open? Is `DataFileCorrupted` surfaced on failure? | [PASS / VIOLATION] |
 | VI. Commit Hygiene | No Co-Authored-By AI attribution in planned commits? | [PASS / VIOLATION] |
+| VII. Pull Request Standards | Will PRs follow title format, include spec/task links, and have test plans? | [PASS / VIOLATION] |
 
 Document any VIOLATION in the Complexity Tracking table below with justification.
 

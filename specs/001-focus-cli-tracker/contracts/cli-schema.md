@@ -182,11 +182,11 @@ focus report [--today | --week]
 ```
 Tag              Total
 ──────────────────────
-rust             3h 42m
-client-a         1h 15m
-untagged           28m
+rust             3h 42m 00s
+client-a         1h 15m 30s
+untagged           28m 07s
 ──────────────────────
-TOTAL            5h 25m
+TOTAL            5h 25m 37s
 ```
 
 **Exit codes**: `0` always (no data is not an error)

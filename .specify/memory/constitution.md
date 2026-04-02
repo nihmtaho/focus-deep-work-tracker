@@ -1,30 +1,23 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: [unversioned template] → 1.0.0
-Bump rationale: MINOR — initial ratification; all placeholder tokens replaced with
-  project-specific principles. No prior version existed.
+Version change: 1.0.0 → 1.1.0
+Bump rationale: MINOR — added new principle (VII. Pull Request Standards) governing
+  PR title format, spec/task linking, test planning, and Claude Code automation.
 
-Modified principles:
-  [PRINCIPLE_1_NAME] → I. Single Binary
-  [PRINCIPLE_2_NAME] → II. Test-First (NON-NEGOTIABLE)
-  [PRINCIPLE_3_NAME] → III. Structured Error Handling
-  [PRINCIPLE_4_NAME] → IV. Color-Independent Output
-  [PRINCIPLE_5_NAME] → V. Data Safety
-  (new)              → VI. Commit Hygiene
+Modified principles: none
+Added principles:
+  (new)              → VII. Pull Request Standards
 
 Added sections:
-  - Technology Stack (replaces [SECTION_2_NAME])
-  - Development Workflow (replaces [SECTION_3_NAME])
+  - Pull Request Standards enforcement in Governance section
 
 Removed sections: none
 
 Templates updated:
-  ✅ .specify/templates/plan-template.md — Constitution Check gates added
-  ✅ .specify/templates/tasks-template.md — TDD enforcement note + WAL mode note added
-  ✅ .specify/memory/constitution.md — this file
-  ⚠ .specify/templates/spec-template.md — no structural change needed;
-      TDD constraint is enforced at the tasks layer, not spec layer
+  ✅ .specify/templates/plan-template.md — Constitution Check includes new principle (VII)
+  ✅ .specify/templates/tasks-template.md — PR enforcement note added to Governance section
+  ⚠ .github/PULL_REQUEST_TEMPLATE.md — CREATED with standard template matching principle VII
 
 Deferred TODOs: none
 -->
@@ -115,6 +108,39 @@ Commits MUST be authored solely under the developer's identity.
 **Rationale**: AI attribution in commit history creates ambiguity about code
 ownership, pollutes `git log`, and is not relevant to the repository's change record.
 
+### VII. Pull Request Standards
+
+Every pull request MUST follow these standards to ensure traceability and quality:
+
+1. **Title format** MUST be: `[feat|fix|refactor|chore]: description`
+   - `feat`: New feature, capability, or behavior
+   - `fix`: Bug fix or correctness improvement
+   - `refactor`: Code restructuring without feature or behavior change
+   - `chore`: Documentation, build, or non-code changes
+
+2. **Spec and task links** MUST be included in PR description:
+   - Reference `.specify/specs/[###-feature]/spec.md` for user stories and requirements
+   - Reference `.specify/specs/[###-feature]/tasks.md` for implementation breakdown
+   - Links enable code review to verify requirements were met
+
+3. **Test plan** MUST include at least 2 manual test steps:
+   - Verify `cargo test` passes (automated gate)
+   - Document manual scenarios that validate feature behavior
+   - Manual tests MUST be actionable and independently reproducible
+
+4. **Merge gate**: A PR MUST NOT be merged if `cargo test` fails.
+   - The CI/automation MUST enforce this; no manual overrides
+   - Failing tests indicate incomplete or regressed implementation
+
+5. **Claude Code automation**: When creating PRs via Claude Code, MUST use
+   `gh pr create` with the standard template from `.github/PULL_REQUEST_TEMPLATE.md`.
+   This ensures consistent formatting and spec/task linkage across all PRs.
+
+**Rationale**: Standardized PR format creates historical traceability (spec → code → merge),
+prevents accidental merges of incomplete work, and makes code review faster by providing
+context upfront. The template ensures feature specifications and tasks are never orphaned
+from their implementation.
+
 ## Technology Stack
 
 - **Language**: Rust stable (1.77+)
@@ -151,5 +177,7 @@ This constitution supersedes all other project practices. Amendments require:
 3. Propagation to all affected templates via the `/speckit.constitution` command
 4. All PRs and plan reviews MUST include a Constitution Check section confirming
    no violations (or documenting justified exceptions in `plan.md` Complexity Tracking)
+5. PR Standard compliance (Principle VII) is enforced at merge time; all PRs MUST
+   follow the title format, include spec/task links, and pass `cargo test` before merge
 
-**Version**: 1.0.0 | **Ratified**: 2026-04-02 | **Last Amended**: 2026-04-02
+**Version**: 1.1.0 | **Ratified**: 2026-04-02 | **Last Amended**: 2026-04-02
