@@ -1,8 +1,5 @@
-mod commands;
-mod db;
-mod display;
-mod error;
-mod models;
+use focus::commands;
+use focus::db;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};

@@ -82,7 +82,7 @@ pub fn stop_session(conn: &Connection) -> Result<Session> {
 
 pub fn list_sessions(conn: &Connection, limit: u32) -> Result<Vec<Session>> {
     let mut stmt = conn.prepare(
-        "SELECT id, task, tag, start_time, end_time FROM sessions WHERE end_time IS NOT NULL ORDER BY start_time DESC LIMIT ?1",
+        "SELECT id, task, tag, start_time, end_time FROM sessions WHERE end_time IS NOT NULL ORDER BY start_time DESC, id DESC LIMIT ?1",
     )?;
     let rows = stmt.query_map(rusqlite::params![limit], |row| {
         Ok((
@@ -119,7 +119,7 @@ pub fn aggregate_by_tag(conn: &Connection, since: i64) -> Result<Vec<(Option<Str
 
 pub fn list_all_completed(conn: &Connection) -> Result<Vec<Session>> {
     let mut stmt = conn.prepare(
-        "SELECT id, task, tag, start_time, end_time FROM sessions WHERE end_time IS NOT NULL ORDER BY start_time ASC",
+        "SELECT id, task, tag, start_time, end_time FROM sessions WHERE end_time IS NOT NULL ORDER BY start_time ASC, id ASC",
     )?;
     let rows = stmt.query_map([], |row| {
         Ok((

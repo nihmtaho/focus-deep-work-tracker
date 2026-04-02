@@ -12,8 +12,13 @@ pub fn open_db() -> Result<Connection> {
     let dir = home.join(".local/share/focus");
     std::fs::create_dir_all(&dir)?;
     let db_path = dir.join("focus.db");
+    open_db_at(&db_path)
+}
 
-    let conn = Connection::open(&db_path).map_err(|_| FocusError::DataFileCorrupted {
+/// Open (or create) a database at an explicit path.
+/// Used by integration tests to open a temporary isolated database.
+pub fn open_db_at(db_path: &std::path::Path) -> Result<Connection> {
+    let conn = Connection::open(db_path).map_err(|_| FocusError::DataFileCorrupted {
         path: db_path.display().to_string(),
     })?;
 

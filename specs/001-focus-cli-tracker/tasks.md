@@ -2,7 +2,7 @@
 
 **Input**: Design documents from `/specs/001-focus-cli-tracker/`  
 **Prerequisites**: plan.md ✓, spec.md ✓, research.md ✓, data-model.md ✓, contracts/cli-schema.md ✓  
-**Tests**: Not explicitly requested — no test tasks generated. Inline validation via `cargo test` in Polish phase.
+**Tests**: Added retroactively (constitution v1.0.0 Principle II compliance). Integration tests in `tests/integration/`, unit tests in `tests/unit/`.
 
 **Organization**: Tasks grouped by user story. Each story is independently buildable and testable after its phase completes.
 
@@ -122,6 +122,18 @@
 - [X] T029 [P] Run `cargo fmt` across all source files; ensure formatting is consistent
 - [X] T030 Run `cargo build --release` and validate the binary at `./target/release/focus` works end-to-end per all scenarios in `specs/001-focus-cli-tracker/quickstart.md`
 - [X] T031 [P] Verify `NO_COLOR=1 focus status` produces plain text output (no ANSI codes) and piped output (`focus log | cat`) also strips color
+
+## Phase 9: Test Suite (Constitution v1.0.0 Principle II Compliance)
+
+**Purpose**: Retroactive TDD compliance — integration and unit tests using isolated temporary SQLite files.
+
+- [X] T032 Add `tempfile = "3"` dev-dependency and expose `src/lib.rs` for test access; add `open_db_at(path)` to `src/db/mod.rs` for test isolation
+- [X] T033 [P] Write `tests/integration/test_start_stop.rs`: FR-001, FR-002, FR-004, FR-010, FR-013 (6 tests)
+- [X] T034 [P] Write `tests/integration/test_log.rs`: FR-005, FR-006, FR-017 (5 tests)
+- [X] T035 [P] Write `tests/integration/test_report.rs`: FR-007, FR-008, FR-009 (5 tests)
+- [X] T036 [P] Write `tests/integration/test_export.rs`: FR-015 (6 tests)
+- [X] T037 [P] Write `tests/unit/test_format.rs`: duration format contract from contracts/cli-schema.md (5 tests)
+- [X] T038 Run `cargo test` — all 27 tests pass; fix sort tiebreaker (`ORDER BY start_time, id`) for same-second inserts
 
 ---
 
