@@ -1,23 +1,19 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: 1.0.0 → 1.1.0
-Bump rationale: MINOR — added new principle (VII. Pull Request Standards) governing
-  PR title format, spec/task linking, test planning, and Claude Code automation.
+Version change: 1.1.0 → 1.2.0
+Bump rationale: MINOR — Technology Stack expanded with ratatui 0.29 and crossterm 0.28,
+  which were added in feature 003 (TUI dashboard) and are now active production dependencies.
 
 Modified principles: none
-Added principles:
-  (new)              → VII. Pull Request Standards
+Added principles: none
 
-Added sections:
-  - Pull Request Standards enforcement in Governance section
+Added sections: none
 
 Removed sections: none
 
 Templates updated:
-  ✅ .specify/templates/plan-template.md — Constitution Check includes new principle (VII)
-  ✅ .specify/templates/tasks-template.md — PR enforcement note added to Governance section
-  ⚠ .github/PULL_REQUEST_TEMPLATE.md — CREATED with standard template matching principle VII
+  ✅ .specify/templates/plan-template.md — Updated constitution version reference to v1.2.0
 
 Deferred TODOs: none
 -->
@@ -152,6 +148,8 @@ from their implementation.
 - **Output color**: `colored 2` with automatic TTY detection (Principle IV)
 - **Home directory**: `dirs 5`
 - **Serialization**: `serde 1` + `serde_json 1`
+- **TUI framework**: `ratatui 0.29` + `crossterm 0.28`; used for the `focus ui`
+  interactive dashboard (Principle I — no daemon; Principle IV — NO_COLOR respected)
 
 New dependencies MUST be justified against this list. Introducing a dependency
 that duplicates existing crate functionality requires a Complexity Tracking entry
@@ -180,4 +178,4 @@ This constitution supersedes all other project practices. Amendments require:
 5. PR Standard compliance (Principle VII) is enforced at merge time; all PRs MUST
    follow the title format, include spec/task links, and pass `cargo test` before merge
 
-**Version**: 1.1.0 | **Ratified**: 2026-04-02 | **Last Amended**: 2026-04-02
+**Version**: 1.2.0 | **Ratified**: 2026-04-02 | **Last Amended**: 2026-04-03

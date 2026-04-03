@@ -31,7 +31,7 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-Evaluate each principle from `.specify/memory/constitution.md` v1.1.0:
+Evaluate each principle from `.specify/memory/constitution.md` v1.2.0:
 
 | Principle | Gate question | Status |
 |---|---|---|

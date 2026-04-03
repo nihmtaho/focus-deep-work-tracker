@@ -1,5 +1,5 @@
 use ratatui::{
-    layout::{Constraint, Direction, Layout},
+    layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Wrap},
@@ -7,11 +7,9 @@ use ratatui::{
 };
 
 use crate::display::format::{format_duration, format_elapsed};
-use crate::tui::app::{App, MessageKind};
+use crate::tui::app::{App, MessageKind, MessageOverlay};
 
-pub fn render(frame: &mut Frame, app: &App) {
-    let area = frame.area();
-
+pub fn render(frame: &mut Frame, app: &App, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(1)
@@ -74,26 +72,33 @@ pub fn render(frame: &mut Frame, app: &App) {
         .wrap(Wrap { trim: true });
     frame.render_widget(session_block, chunks[1]);
 
-    // Today summary
-    let summary_lines: Vec<Line> = if app.today_summary.is_empty() {
+    // Today summary — show individual session names
+    let summary_lines: Vec<Line> = if app.today_sessions.is_empty() {
         vec![Line::from(Span::styled(
             "  No sessions today.",
             Style::default().fg(Color::DarkGray),
         ))]
     } else {
         let mut lines = Vec::new();
-        let total_secs: i64 = app.today_summary.iter().map(|(_, s)| s).sum();
-        for (tag, secs) in &app.today_summary {
-            let label = tag.as_deref().unwrap_or("untagged");
-            let dur = format_duration(chrono::Duration::seconds(*secs));
+        let mut total_secs: i64 = 0;
+        for session in &app.today_sessions {
+            let secs = session.duration().map(|d| d.num_seconds()).unwrap_or(0);
+            total_secs += secs;
+            let dur = format_duration(chrono::Duration::seconds(secs));
+            let tag_suffix = session
+                .tag
+                .as_deref()
+                .map(|t| format!(" [{}]", t))
+                .unwrap_or_default();
+            let label = format!("  {}{}", session.task, tag_suffix);
             lines.push(Line::from(vec![
-                Span::styled(format!("  {:<20}", label), Style::default().fg(Color::Cyan)),
+                Span::styled(format!("{:<30}", label), Style::default().fg(Color::Cyan)),
                 Span::raw(dur),
             ]));
         }
         lines.push(Line::from(vec![
             Span::styled(
-                format!("  {:<20}", "TOTAL"),
+                format!("  {:<30}", "TOTAL"),
                 Style::default()
                     .fg(Color::White)
                     .add_modifier(Modifier::BOLD),
@@ -117,7 +122,7 @@ pub fn render(frame: &mut Frame, app: &App) {
     frame.render_widget(summary_block, chunks[2]);
 
     // Help bar
-    let help = Paragraph::new(" [M] Menu  [Q] Quit ")
+    let help = Paragraph::new(" [N] New  [S] Stop  [?] Help  [Q] Quit ")
         .style(Style::default().fg(Color::DarkGray))
         .block(Block::default().borders(Borders::NONE));
     frame.render_widget(help, chunks[3]);
@@ -128,15 +133,11 @@ pub fn render(frame: &mut Frame, app: &App) {
     }
 }
 
-pub fn render_message_overlay_pub(
-    frame: &mut Frame,
-    app: &App,
-    msg: &crate::tui::app::MessageOverlay,
-) {
+pub fn render_message_overlay_pub(frame: &mut Frame, app: &App, msg: &MessageOverlay) {
     render_message_overlay(frame, app, msg);
 }
 
-fn render_message_overlay(frame: &mut Frame, app: &App, msg: &crate::tui::app::MessageOverlay) {
+fn render_message_overlay(frame: &mut Frame, app: &App, msg: &MessageOverlay) {
     use ratatui::layout::Rect;
 
     let area = frame.area();
