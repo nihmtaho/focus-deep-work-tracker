@@ -117,6 +117,15 @@ pub fn aggregate_by_tag(conn: &Connection, since: i64) -> Result<Vec<(Option<Str
     Ok(result)
 }
 
+pub fn count_completed(conn: &Connection) -> Result<usize> {
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM sessions WHERE end_time IS NOT NULL",
+        [],
+        |row| row.get(0),
+    )?;
+    Ok(count as usize)
+}
+
 pub fn list_all_completed(conn: &Connection) -> Result<Vec<Session>> {
     let mut stmt = conn.prepare(
         "SELECT id, task, tag, start_time, end_time FROM sessions WHERE end_time IS NOT NULL ORDER BY start_time ASC, id ASC",

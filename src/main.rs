@@ -46,6 +46,8 @@ enum Commands {
         #[arg(short, long)]
         format: String,
     },
+    /// Launch interactive TUI dashboard
+    Ui,
 }
 
 fn main() {
@@ -67,6 +69,7 @@ fn run(cli: Cli) -> Result<()> {
         Commands::Log { limit } => commands::log::run(&conn, limit)?,
         Commands::Report { today, week } => commands::report::run(&conn, today, week)?,
         Commands::Export { format } => commands::export::run(&conn, format)?,
+        Commands::Ui => focus::tui::run(conn)?,
     }
 
     Ok(())
