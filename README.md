@@ -2,6 +2,8 @@
 
 A minimal CLI for tracking deep work sessions. Start a timer, stop it when you're done, and review where your focused time went — all from the terminal, with no network, no accounts, and no background processes.
 
+Run `focus ui` for a live interactive dashboard that ticks in real time and lets you start sessions, browse your log, and view reports — all with keyboard navigation.
+
 Data is stored locally in a SQLite database at `~/.local/share/focus/focus.db`.
 
 **Platforms**: macOS, Linux (x86_64, aarch64)
@@ -71,6 +73,48 @@ Duration: 4m 23s
 ---
 
 ## Commands
+
+### `focus ui`
+
+Launch the interactive TUI dashboard. Requires an interactive terminal (minimum 60×12).
+
+```bash
+focus ui
+```
+
+The dashboard opens showing your active session and today's summary by tag, updating every 100ms.
+
+**Screens:**
+
+| Screen | How to reach | What it shows |
+|--------|-------------|---------------|
+| Dashboard | default / `D` from Menu | Active session with live elapsed time + today's tag totals |
+| Menu | `M` or `Tab` | All actions — start, stop, log, report |
+| Start Form | `M` → `1` / `S` | Two-field form: task name (required) + tag (optional) |
+| Session Log | `M` → `3` / `L` | Paginated reverse-chronological log, 10 rows per page |
+| Report | `M` → `4` / `R` | Tag totals for Today / Current Week / Last 7 Days |
+
+**Keyboard shortcuts:**
+
+| Key | Action |
+|-----|--------|
+| `M` / `Tab` | Open Menu |
+| `D` | Back to Dashboard |
+| `Q` | Quit (double-press if a session is running) |
+| `Ctrl-C` | Force quit |
+| `↑` / `↓` or `j` / `k` | Navigate lists |
+| `Enter` | Select / confirm |
+| `Esc` | Cancel / go back |
+| `Tab` | Switch input field (Start Form) |
+| `N` / `P` | Next / previous page (Session Log) |
+
+**No-color mode:** set `NO_COLOR=1` before launching to render without ANSI colors.
+
+```bash
+NO_COLOR=1 focus ui
+```
+
+---
 
 ### `focus start <TASK> [--tag <TAG>]`
 
@@ -249,7 +293,7 @@ Color is automatically disabled when:
 cargo test
 ```
 
-27 tests covering all six commands, duration formatting, and edge cases. Integration tests use a temporary isolated database — your real data is never touched.
+35 tests covering all commands, the TUI state machine, duration formatting, and edge cases. Integration tests use a temporary isolated database — your real data is never touched.
 
 ---
 
