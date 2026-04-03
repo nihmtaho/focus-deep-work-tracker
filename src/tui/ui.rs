@@ -1,22 +1,265 @@
-use ratatui::Frame;
+use ratatui::{
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::{Block, Borders, Clear, Paragraph, Wrap},
+    Frame,
+};
 
-use crate::tui::app::{App, View};
+use crate::tui::app::{App, MessageKind, Overlay, Tab};
 use crate::tui::views;
 
-/// Dispatch rendering to the appropriate view renderer.
+const HELP_TEXT: &str = "\
+Global
+  1-4       Switch tab
+  Tab       Next tab
+  ?         Show this help
+  q         Quit
+  Esc       Clear message
+
+Dashboard
+  n         New session (enter name, then optional tag)
+  s/Enter   Stop active session
+
+Log
+  ↑/↓       Select row
+  ←/→       Change page
+  d         Delete selected session
+  r         Rename selected session
+  j/k/g/G   Vim navigation (when enabled)
+
+Report
+  h/l       Change time window
+
+Settings
+  v         Toggle vim mode
+
+Overlays
+  Enter     Confirm
+  Esc       Cancel
+  y/n       Confirm/Cancel delete
+";
+
 pub fn render(frame: &mut Frame, app: &App) {
-    match &app.view {
-        View::Dashboard => views::dashboard::render(frame, app),
-        View::Menu { selected } => views::menu::render(frame, app, *selected),
-        View::StartForm {
-            task,
-            tag,
-            active_field,
-        } => views::start_form::render(frame, app, task, tag, active_field),
-        View::Log { page } => views::log::render(frame, app, *page),
-        View::Report {
-            window,
-            selected_window,
-        } => views::report::render(frame, app, window, *selected_window),
+    let area = frame.area();
+
+    // Split into tab bar + content
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(1), Constraint::Min(0)])
+        .split(area);
+
+    render_tab_bar(frame, app, chunks[0]);
+
+    match &app.active_tab {
+        Tab::Dashboard => views::dashboard::render(frame, app, chunks[1]),
+        Tab::Log => views::log::render(frame, app, app.log_page, app.log_selected, chunks[1]),
+        Tab::Report => views::report::render(
+            frame,
+            app,
+            &app.report_window,
+            app.report_selected_window,
+            chunks[1],
+        ),
+        Tab::Settings => views::settings::render(frame, app, chunks[1]),
     }
+
+    // Render overlay on top
+    if app.overlay.is_active() {
+        render_overlay(frame, app, area);
+    }
+
+    // Render message notification if present (and no modal overlay)
+    if app.message.is_some() && !app.overlay.is_active() {
+        if let Some(msg) = &app.message {
+            render_message_overlay(frame, app, msg, area);
+        }
+    }
+}
+
+fn render_tab_bar(frame: &mut Frame, app: &App, area: Rect) {
+    let tabs = [
+        (Tab::Dashboard, "[1]Dashboard"),
+        (Tab::Log, "[2]Log"),
+        (Tab::Report, "[3]Report"),
+        (Tab::Settings, "[4]Settings"),
+    ];
+
+    let spans: Vec<Span> = tabs
+        .iter()
+        .flat_map(|(tab, label)| {
+            let active = &app.active_tab == tab;
+            let span = if active {
+                Span::styled(
+                    format!(" {label} "),
+                    Style::default()
+                        .fg(Color::Black)
+                        .bg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                )
+            } else {
+                Span::styled(format!(" {label} "), Style::default().fg(Color::DarkGray))
+            };
+            vec![span, Span::raw("")]
+        })
+        .collect();
+
+    let bar = Paragraph::new(Line::from(spans)).alignment(Alignment::Left);
+    frame.render_widget(bar, area);
+}
+
+fn render_overlay(frame: &mut Frame, app: &App, area: Rect) {
+    match &app.overlay {
+        Overlay::Prompt { label, value, .. } => {
+            render_prompt_overlay(frame, area, label, value);
+        }
+        Overlay::ConfirmDelete { session_name, .. } => {
+            render_confirm_delete_overlay(frame, area, session_name);
+        }
+        Overlay::Help => {
+            render_help_overlay(frame, area);
+        }
+        Overlay::None => {}
+    }
+
+    // Also show message notification inside overlays if present
+    if let Some(msg) = &app.message {
+        render_message_overlay(frame, app, msg, area);
+    }
+}
+
+fn centered_rect(percent_x: u16, height: u16, area: Rect) -> Rect {
+    let width = (area.width * percent_x / 100).min(area.width.saturating_sub(4));
+    let x = area.x + (area.width.saturating_sub(width)) / 2;
+    let y = area.y + (area.height.saturating_sub(height)) / 2;
+    Rect {
+        x,
+        y,
+        width,
+        height: height.min(area.height),
+    }
+}
+
+fn render_prompt_overlay(frame: &mut Frame, area: Rect, label: &str, value: &str) {
+    let block_area = centered_rect(55, 5, area);
+    frame.render_widget(Clear, block_area);
+
+    let display_value = format!("{value}█");
+    let content = vec![
+        Line::from(Span::styled(label, Style::default().fg(Color::Yellow))),
+        Line::from(Span::raw("")),
+        Line::from(Span::styled(
+            &display_value,
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::raw("")),
+        Line::from(Span::styled(
+            "[Enter] Confirm  [Esc] Cancel",
+            Style::default().fg(Color::DarkGray),
+        )),
+    ];
+
+    let widget = Paragraph::new(content)
+        .block(
+            Block::default()
+                .title(" Input ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan)),
+        )
+        .wrap(Wrap { trim: true });
+    frame.render_widget(widget, block_area);
+}
+
+fn render_confirm_delete_overlay(frame: &mut Frame, area: Rect, session_name: &str) {
+    let block_area = centered_rect(60, 5, area);
+    frame.render_widget(Clear, block_area);
+
+    let name_truncated: String = session_name.chars().take(40).collect();
+    let content = vec![
+        Line::from(Span::styled(
+            "Are you sure you want to delete:",
+            Style::default().fg(Color::White),
+        )),
+        Line::from(Span::raw("")),
+        Line::from(Span::styled(
+            format!("  \"{}\"", name_truncated),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::raw("")),
+        Line::from(Span::styled(
+            "[Y]es  [N]o  [Esc] Cancel",
+            Style::default().fg(Color::DarkGray),
+        )),
+    ];
+
+    let widget = Paragraph::new(content).block(
+        Block::default()
+            .title(" Confirm Delete ")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Red)),
+    );
+    frame.render_widget(widget, block_area);
+}
+
+fn render_help_overlay(frame: &mut Frame, area: Rect) {
+    let height = (HELP_TEXT.lines().count() as u16 + 2).min(area.height.saturating_sub(2));
+    let block_area = centered_rect(65, height, area);
+    frame.render_widget(Clear, block_area);
+
+    let widget = Paragraph::new(HELP_TEXT)
+        .block(
+            Block::default()
+                .title(" Key Bindings — any key to dismiss ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan)),
+        )
+        .wrap(Wrap { trim: false });
+    frame.render_widget(widget, block_area);
+}
+
+fn render_message_overlay(
+    frame: &mut Frame,
+    app: &App,
+    msg: &crate::tui::app::MessageOverlay,
+    area: Rect,
+) {
+    let msg_width = (msg.text.len() as u16 + 4).min(area.width.saturating_sub(4));
+    let x = area.x + (area.width.saturating_sub(msg_width)) / 2;
+    let y = area.y + area.height.saturating_sub(4);
+
+    let overlay_area = Rect {
+        x,
+        y,
+        width: msg_width,
+        height: 3,
+    };
+
+    let (fg, title) = if app.no_color {
+        (
+            Color::White,
+            match msg.kind {
+                MessageKind::Success => " OK ",
+                MessageKind::Warning => " WARN ",
+                MessageKind::Error => " ERROR ",
+            },
+        )
+    } else {
+        match msg.kind {
+            MessageKind::Success => (Color::Green, " OK "),
+            MessageKind::Warning => (Color::Yellow, " WARN "),
+            MessageKind::Error => (Color::Red, " ERROR "),
+        }
+    };
+
+    let overlay = Paragraph::new(msg.text.clone())
+        .block(
+            Block::default()
+                .title(title)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(fg)),
+        )
+        .style(Style::default().fg(fg));
+    frame.render_widget(overlay, overlay_area);
 }

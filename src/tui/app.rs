@@ -1,5 +1,6 @@
 use std::time::Instant;
 
+use crate::config::AppConfig;
 use crate::models::session::Session;
 
 // ── Time window ────────────────────────────────────────────────────────────────
@@ -9,14 +10,6 @@ pub enum TimeWindow {
     Today,
     CurrentWeek,
     Last7Days,
-}
-
-// ── Input field ────────────────────────────────────────────────────────────────
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum InputField {
-    Task,
-    Tag,
 }
 
 // ── Message overlay ────────────────────────────────────────────────────────────
@@ -69,34 +62,87 @@ impl MessageOverlay {
     }
 }
 
-// ── View ───────────────────────────────────────────────────────────────────────
+// ── Tab ────────────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone)]
-pub enum View {
+#[derive(Debug, Clone, PartialEq)]
+pub enum Tab {
     Dashboard,
-    Menu {
-        selected: usize,
-    },
-    StartForm {
+    Log,
+    Report,
+    Settings,
+}
+
+// ── PromptAction ───────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PromptAction {
+    StartSession,
+    /// Second step: user already entered task name, now entering optional tag.
+    StartSessionTag {
         task: String,
-        tag: String,
-        active_field: InputField,
     },
-    Log {
-        page: usize,
+    RenameSession {
+        id: i64,
     },
-    Report {
-        window: TimeWindow,
-        selected_window: usize,
+}
+
+// ── Overlay ────────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Overlay {
+    None,
+    Prompt {
+        label: String,
+        value: String,
+        action: PromptAction,
     },
+    ConfirmDelete {
+        session_id: i64,
+        session_name: String,
+    },
+    Help,
+}
+
+impl Overlay {
+    pub fn is_active(&self) -> bool {
+        !matches!(self, Overlay::None)
+    }
+}
+
+// ── TimeWindow state ───────────────────────────────────────────────────────────
+
+pub fn window_to_idx(w: &TimeWindow) -> usize {
+    match w {
+        TimeWindow::Today => 0,
+        TimeWindow::CurrentWeek => 1,
+        TimeWindow::Last7Days => 2,
+    }
+}
+
+pub fn idx_to_window(idx: usize) -> TimeWindow {
+    match idx {
+        0 => TimeWindow::Today,
+        1 => TimeWindow::CurrentWeek,
+        _ => TimeWindow::Last7Days,
+    }
 }
 
 // ── App ────────────────────────────────────────────────────────────────────────
 
 pub struct App {
-    pub view: View,
+    pub active_tab: Tab,
+    pub overlay: Overlay,
+    pub log_selected: usize,
+    pub config: AppConfig,
+    // Report state
+    pub report_window: TimeWindow,
+    pub report_selected_window: usize,
+    // Log pagination (page stored in App now)
+    pub log_page: usize,
+    // Data fields
     pub active_session: Option<Session>,
     pub today_summary: Vec<(Option<String>, i64)>,
+    pub today_sessions: Vec<Session>,
     pub log_entries: Vec<Session>,
     pub log_total_pages: usize,
     pub report_rows: Vec<(Option<String>, i64)>,
@@ -109,11 +155,18 @@ pub struct App {
 pub const LOG_PAGE_SIZE: usize = 10;
 
 impl App {
-    pub fn new(no_color: bool) -> Self {
+    pub fn new(no_color: bool, config: AppConfig) -> Self {
         Self {
-            view: View::Dashboard,
+            active_tab: Tab::Dashboard,
+            overlay: Overlay::None,
+            log_selected: 0,
+            config,
+            report_window: TimeWindow::Today,
+            report_selected_window: 0,
+            log_page: 0,
             active_session: None,
             today_summary: Vec::new(),
+            today_sessions: Vec::new(),
             log_entries: Vec::new(),
             log_total_pages: 1,
             report_rows: Vec::new(),
@@ -131,15 +184,15 @@ impl App {
 
         self.active_session = session_store::get_active_session(conn)?;
         self.today_summary = session_store::aggregate_by_tag(conn, today_start())?;
+        self.today_sessions = session_store::list_completed_since(conn, today_start())?;
         Ok(())
     }
 
-    /// Load log entries from the database (all completed, for pagination).
+    /// Load log entries from the database (all completed, newest first).
     pub fn load_log(&mut self, conn: &rusqlite::Connection) -> anyhow::Result<()> {
         use crate::db::session_store;
 
         self.log_entries = session_store::list_all_completed(conn)?;
-        // Reverse so newest first
         self.log_entries.reverse();
         let total = self.log_entries.len();
         self.log_total_pages = if total == 0 {
@@ -147,7 +200,19 @@ impl App {
         } else {
             total.div_ceil(LOG_PAGE_SIZE)
         };
+        self.log_selected = 0;
+        self.log_page = 0;
         Ok(())
+    }
+
+    /// Clamp log_selected to valid range after a page change or reload.
+    pub fn clamp_log_selected(&mut self) {
+        let page_entries = self.log_page_entries(self.log_page).len();
+        if page_entries == 0 {
+            self.log_selected = 0;
+        } else if self.log_selected >= page_entries {
+            self.log_selected = page_entries - 1;
+        }
     }
 
     /// Load report rows for the given time window.
@@ -165,14 +230,17 @@ impl App {
             TimeWindow::Last7Days => rolling_7d_start(),
         };
         self.report_rows = session_store::aggregate_by_tag(conn, since)?;
+        self.report_window = window.clone();
+        self.report_selected_window = window_to_idx(window);
         Ok(())
     }
 
-    /// Tick update for Dashboard view (refreshes active session timer).
+    /// Tick update for Dashboard tab (refreshes active session timer).
     pub fn tick_dashboard(&mut self, conn: &rusqlite::Connection) -> anyhow::Result<()> {
+        use crate::commands::report::today_start;
         use crate::db::session_store;
         self.active_session = session_store::get_active_session(conn)?;
-        // Auto-dismiss expired messages
+        self.today_sessions = session_store::list_completed_since(conn, today_start())?;
         if let Some(ref msg) = self.message {
             if msg.is_expired() {
                 self.message = None;
@@ -200,7 +268,6 @@ impl App {
 }
 
 /// Truncate a string to `max_chars` Unicode scalar values.
-/// If truncation occurs, the last character is replaced with `…` (ellipsis, counts as 1).
 pub fn truncate_to(s: &str, max_chars: usize) -> String {
     if max_chars == 0 {
         return String::new();
@@ -209,7 +276,6 @@ pub fn truncate_to(s: &str, max_chars: usize) -> String {
     if char_count <= max_chars {
         s.to_string()
     } else {
-        // Take max_chars - 1 chars, then append ellipsis
         let truncated: String = s.chars().take(max_chars - 1).collect();
         format!("{}…", truncated)
     }

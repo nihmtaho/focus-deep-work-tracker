@@ -1,5 +1,5 @@
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Cell, Paragraph, Row, Table},
@@ -9,9 +9,13 @@ use ratatui::{
 use crate::display::format::format_duration;
 use crate::tui::app::{App, TimeWindow};
 
-pub fn render(frame: &mut Frame, app: &App, window: &TimeWindow, selected_window: usize) {
-    let area = frame.area();
-
+pub fn render(
+    frame: &mut Frame,
+    app: &App,
+    window: &TimeWindow,
+    selected_window: usize,
+    area: Rect,
+) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(1)
@@ -34,8 +38,8 @@ pub fn render(frame: &mut Frame, app: &App, window: &TimeWindow, selected_window
         .block(Block::default().borders(Borders::NONE));
     frame.render_widget(title, chunks[0]);
 
-    // Tab bar
-    let tabs = ["1:Today", "2:This Week", "3:Last 7 Days"];
+    // Tab bar (h/l navigation, no number keys)
+    let tabs = ["Today", "This Week", "Last 7 Days"];
     let tab_spans: Vec<Span> = tabs
         .iter()
         .enumerate()
@@ -58,14 +62,12 @@ pub fn render(frame: &mut Frame, app: &App, window: &TimeWindow, selected_window
     let tab_bar = Paragraph::new(Line::from(tab_spans)).alignment(Alignment::Left);
     frame.render_widget(tab_bar, chunks[1]);
 
-    // Window label
     let window_label = match window {
         TimeWindow::Today => "Today",
         TimeWindow::CurrentWeek => "This Week (Mon–now)",
         TimeWindow::Last7Days => "Last 7 Days",
     };
 
-    // Table
     let header_cells = ["Tag", "Time"].iter().map(|h| {
         Cell::from(*h).style(
             Style::default()
@@ -100,15 +102,9 @@ pub fn render(frame: &mut Frame, app: &App, window: &TimeWindow, selected_window
 
     let col_widths = [Constraint::Min(20), Constraint::Length(15)];
 
-    let empty_msg = if app.report_rows.is_empty() {
-        format!("No sessions recorded for {}.", window_label)
-    } else {
-        String::new()
-    };
-
     if app.report_rows.is_empty() {
         let empty = Paragraph::new(Line::from(vec![Span::styled(
-            empty_msg,
+            format!("No sessions recorded for {}.", window_label),
             Style::default().fg(Color::DarkGray),
         )]))
         .block(
@@ -128,9 +124,14 @@ pub fn render(frame: &mut Frame, app: &App, window: &TimeWindow, selected_window
         frame.render_widget(table, chunks[2]);
     }
 
-    // Help
-    let help = Paragraph::new(" [←→] Switch window  [1/2/3] Jump  [Q/Esc] Back ")
+    // Help — removed 1/2/3 shortcuts; h/l only
+    let help = Paragraph::new(" [H/L] Change Period  [?] Help ")
         .style(Style::default().fg(Color::DarkGray))
         .alignment(Alignment::Center);
     frame.render_widget(help, chunks[3]);
+
+    // Message overlay
+    if let Some(msg) = &app.message {
+        crate::tui::views::dashboard::render_message_overlay_pub(frame, app, msg);
+    }
 }

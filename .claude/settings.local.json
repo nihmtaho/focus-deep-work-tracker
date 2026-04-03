@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.specify/scripts/bash/create-new-feature.sh Build a CLI tool called focus that helps developers track deep work sessions.:*)",
+      "Bash(.specify/scripts/bash/check-prerequisites.sh:*)",
+      "Bash(.specify/scripts/bash/setup-plan.sh:*)",
+      "WebSearch",
+      "Bash(.specify/scripts/bash/update-agent-context.sh claude:*)",
+      "Bash(bash:*)",
+      "Bash(./target/release/focus status:*)",
+      "Bash(./target/release/focus log:*)",
+      "Bash(./target/release/focus --help)",
+      "Bash(./target/release/focus start:*)",
+      "Bash(./target/release/focus report:*)",
+      "Bash(./target/release/focus export:*)",
+      "Read(//private/tmp/**)",
+      "Bash(gh api:*)",
+      "Bash(find:*)",
+      "Read(//tmp/**)",
+      "WebFetch(domain:docs.rs)",
+      "WebFetch(domain:github.com)",
+      "Bash(3h 42m)",
+      "Bash(3h 42m 00s)",
+      "Skill(commit-commands:commit-push-pr)",
+      "Bash(.specify/scripts/bash/create-new-feature.sh:*)"
+    ]
+  }
+}

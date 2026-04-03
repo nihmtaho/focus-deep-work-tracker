@@ -20,6 +20,9 @@ pub enum FocusError {
     #[error("Data file is corrupted or unreadable: {path}")]
     DataFileCorrupted { path: String },
 
+    #[error("Session #{id} not found.")]
+    SessionNotFound { id: i64 },
+
     #[error(transparent)]
     Db(#[from] rusqlite::Error),
 

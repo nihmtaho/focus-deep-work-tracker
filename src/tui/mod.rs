@@ -4,6 +4,8 @@ pub mod ui;
 pub mod views;
 
 use std::io::{self, IsTerminal};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -14,7 +16,9 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 
-use crate::tui::app::{App, View};
+use crate::config::{config_file_path, load_config};
+use crate::db::session_store;
+use crate::tui::app::{App, Tab};
 use crate::tui::events::handle_key_event;
 use crate::tui::ui::render;
 
@@ -32,6 +36,9 @@ pub fn run(conn: rusqlite::Connection) -> Result<()> {
     // Read NO_COLOR
     let no_color = std::env::var("NO_COLOR").is_ok();
 
+    // Load config
+    let config = load_config(&config_file_path());
+
     // Set up panic hook to restore terminal
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
@@ -48,7 +55,7 @@ pub fn run(conn: rusqlite::Connection) -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let result = run_app(&mut terminal, &conn, no_color);
+    let result = run_app(&mut terminal, &conn, no_color, config);
 
     // Cleanup
     disable_raw_mode()?;
@@ -62,37 +69,45 @@ fn run_app(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     conn: &rusqlite::Connection,
     no_color: bool,
+    config: crate::config::AppConfig,
 ) -> Result<()> {
-    let mut app = App::new(no_color);
+    // Signal flag for Ctrl+C / SIGTERM
+    let signal_flag = Arc::new(AtomicBool::new(false));
+    let flag_clone = Arc::clone(&signal_flag);
+    let _ = ctrlc::set_handler(move || {
+        flag_clone.store(true, Ordering::Relaxed);
+    });
+
+    let mut app = App::new(no_color, config);
 
     // Load initial dashboard data
     app.load_dashboard(conn)?;
 
     loop {
+        // Check signal
+        if signal_flag.load(Ordering::Relaxed) {
+            break;
+        }
+
         // Check terminal size
         let size = terminal.size()?;
         if size.width < MIN_WIDTH || size.height < MIN_HEIGHT {
-            // Show size guard message
             terminal.draw(|frame| {
                 let area = frame.area();
                 let msg = format!(
-                    "Terminal too small. Minimum: {}×{}. Current: {}×{}. Resize to continue or press Q to quit.",
+                    "Terminal too small. Minimum: {}×{}. Current: {}×{}. Resize or press Q to quit.",
                     MIN_WIDTH, MIN_HEIGHT, area.width, area.height
                 );
                 let widget = ratatui::widgets::Paragraph::new(msg)
-                    .style(
-                        ratatui::style::Style::default()
-                            .fg(ratatui::style::Color::Yellow),
-                    )
+                    .style(ratatui::style::Style::default().fg(ratatui::style::Color::Yellow))
                     .wrap(ratatui::widgets::Wrap { trim: true });
                 frame.render_widget(widget, area);
             })?;
 
-            // Poll for resize or Q
             if event::poll(Duration::from_millis(200))? {
                 if let Event::Key(key) = event::read()? {
                     if key.code == KeyCode::Char('q') || key.code == KeyCode::Char('Q') {
-                        return Ok(());
+                        break;
                     }
                 }
             }
@@ -108,19 +123,24 @@ fn run_app(
                 Event::Key(key) => {
                     let should_quit = handle_key_event(&mut app, conn, key)?;
                     if should_quit || app.quit_pending {
-                        return Ok(());
+                        break;
                     }
                 }
-                Event::Resize(_, _) => {
-                    // Will re-check size next loop iteration
-                }
+                Event::Resize(_, _) => {}
                 _ => {}
             }
         } else {
-            // Tick: update dashboard timer if in Dashboard view
-            if matches!(app.view, View::Dashboard) {
+            // Tick: update dashboard data
+            if app.active_tab == Tab::Dashboard {
                 app.tick_dashboard(conn)?;
             }
         }
     }
+
+    // Auto-save active session on any exit path
+    if let Ok(Some(_)) = session_store::get_active_session(conn) {
+        let _ = session_store::stop_session(conn);
+    }
+
+    Ok(())
 }

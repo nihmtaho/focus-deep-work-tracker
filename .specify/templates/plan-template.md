@@ -31,15 +31,15 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-Evaluate each principle from `.specify/memory/constitution.md` v1.1.0:
+Evaluate each principle from `.specify/memory/constitution.md` v1.3.0:
 
 | Principle | Gate question | Status |
 |---|---|---|
 | I. Single Binary | Does this feature require a second binary, daemon, or system dependency? | [PASS / VIOLATION] |
 | II. Test-First | Are tests planned before implementation tasks in tasks.md? | [PASS / VIOLATION] |
-| III. Structured Error Handling | Do all error paths use `anyhow::Result` + `FocusError` variants? | [PASS / VIOLATION] |
+| III. Structured Error Handling | Do all error paths use `anyhow::Result` + `FocusError` variants? Are persistence errors (config saves, DB writes) surfaced to the user — no `let _ = result` on fallible writes? | [PASS / VIOLATION] |
 | IV. Color-Independent Output | Is output readable without color? TTY detection confirmed? | [PASS / VIOLATION] |
-| V. Data Safety | Is WAL mode enabled on DB open? Is `DataFileCorrupted` surfaced on failure? | [PASS / VIOLATION] |
+| V. Data Safety | Is WAL mode enabled on DB open? Is `DataFileCorrupted` surfaced on failure? Do UPDATE+SELECT pairs join on stable primary key (not on a value written by the UPDATE)? | [PASS / VIOLATION] |
 | VI. Commit Hygiene | No Co-Authored-By AI attribution in planned commits? | [PASS / VIOLATION] |
 | VII. Pull Request Standards | Will PRs follow title format, include spec/task links, and have test plans? | [PASS / VIOLATION] |
 
