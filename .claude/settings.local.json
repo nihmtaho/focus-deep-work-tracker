@@ -22,7 +22,11 @@
       "Bash(3h 42m)",
       "Bash(3h 42m 00s)",
       "Skill(commit-commands:commit-push-pr)",
-      "Bash(.specify/scripts/bash/create-new-feature.sh:*)"
+      "Bash(.specify/scripts/bash/create-new-feature.sh:*)",
+      "Bash(cat /Users/nihmtaho/.claude/skills/*.md)"
     ]
+  },
+  "enabledPlugins": {
+    "skill-creator@claude-plugins-official": true
   }
 }
