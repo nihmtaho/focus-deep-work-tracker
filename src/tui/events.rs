@@ -405,9 +405,12 @@ pub fn handle_settings_tab(app: &mut App, key: KeyEvent) -> Result<bool> {
         } else {
             "Vim mode disabled"
         };
-        app.message = Some(MessageOverlay::success(msg));
         let path = crate::config::config_file_path();
-        let _ = save_config(&path, &app.config);
+        if let Err(e) = save_config(&path, &app.config) {
+            app.message = Some(MessageOverlay::error(format!("Failed to save settings: {e}")));
+        } else {
+            app.message = Some(MessageOverlay::success(msg));
+        }
     }
     Ok(false)
 }

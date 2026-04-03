@@ -1,19 +1,24 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: 1.1.0 → 1.2.0
-Bump rationale: MINOR — Technology Stack expanded with ratatui 0.29 and crossterm 0.28,
-  which were added in feature 003 (TUI dashboard) and are now active production dependencies.
+Version change: 1.2.0 → 1.3.0
+Bump rationale: MINOR — Materially expanded Principle III and Principle V with
+  specific non-negotiable rules derived from bugs found in PR #4 code review
+  (lessons L001 and L002 in .specify/memory/lessons-learned.md).
 
-Modified principles: none
-Added principles: none
+Modified principles:
+  - III. Structured Error Handling — added rule: persistence errors MUST be
+    surfaced to the user, never discarded with `let _ = result`
+  - V. Data Safety — added rule: DB mutations MUST be identified by stable primary
+    key, never by a value written in the same statement (e.g. timestamp join key)
 
 Added sections: none
 
 Removed sections: none
 
 Templates updated:
-  ✅ .specify/templates/plan-template.md — Updated constitution version reference to v1.2.0
+  ✅ .specify/templates/plan-template.md — Updated constitution version reference
+     to v1.3.0; expanded gate questions for Principle III and Principle V
 
 Deferred TODOs: none
 -->
@@ -59,9 +64,17 @@ Domain errors MUST be defined as typed variants in a `FocusError` enum using
 `thiserror`. Panic is forbidden except in `expect()` calls on invariants that
 are statically guaranteed by construction (e.g., hard-coded valid time values).
 
+Errors from persistence operations (config saves, DB writes) MUST be surfaced to
+the user — never silently discarded with `let _ = result`. In TUI context, surface
+the error via `MessageOverlay::error(...)` before returning. In CLI context,
+propagate with `?`. `let _ = expr` is only acceptable for operations that are
+genuinely fire-and-forget with no observable side-effects on user-visible state.
+
 **Rationale**: Mixing ad-hoc string errors with structured errors makes CLI output
 unpredictable and breaks scripting. A typed error enum provides exhaustive handling
-and clear user messages at a single exit point.
+and clear user messages at a single exit point. Silent persistence failures cause
+data loss that is invisible to the user — a config saved only in memory is
+indistinguishable from one written to disk until the next restart.
 
 ### IV. Color-Independent Output
 
@@ -92,8 +105,18 @@ The data directory MUST be created automatically on first run via
 `std::fs::create_dir_all`. Any failure to open or migrate the database MUST
 surface as `FocusError::DataFileCorrupted` with the full absolute path.
 
+Database mutations MUST be identified by stable primary key when the mutated row
+needs to be read back. Never use a value written by an UPDATE (e.g., a timestamp)
+as the join key in a subsequent SELECT on that same row — two rows can share the
+same timestamp within a second. Capture the row's `id` before the mutation and
+re-fetch by that `id`. `last_insert_rowid()` is only valid after an INSERT, not
+after an UPDATE.
+
 **Rationale**: Developers trust a local tool to never corrupt their session history.
-WAL mode is the minimum bar for SQLite durability in a single-writer tool.
+WAL mode is the minimum bar for SQLite durability in a single-writer tool. Using
+timestamps as post-UPDATE join keys is a silent correctness bug: it works almost
+always and fails unpredictably, making it harder to detect and diagnose than an
+outright crash.
 
 ### VI. Commit Hygiene
 
@@ -178,4 +201,4 @@ This constitution supersedes all other project practices. Amendments require:
 5. PR Standard compliance (Principle VII) is enforced at merge time; all PRs MUST
    follow the title format, include spec/task links, and pass `cargo test` before merge
 
-**Version**: 1.2.0 | **Ratified**: 2026-04-02 | **Last Amended**: 2026-04-03
+**Version**: 1.3.0 | **Ratified**: 2026-04-02 | **Last Amended**: 2026-04-03

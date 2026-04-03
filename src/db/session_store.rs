@@ -57,17 +57,23 @@ pub fn get_active_session(conn: &Connection) -> Result<Option<Session>> {
 }
 
 pub fn stop_session(conn: &Connection) -> Result<Session> {
+    // Capture the active session's ID before updating so we can fetch it back
+    // precisely. Using a timestamp as the join key is unsafe — two sessions
+    // could share the same end_time second.
+    let active = get_active_session(conn)?
+        .ok_or_else(|| anyhow::anyhow!("No active session to stop"))?;
+
     let now = Utc::now().timestamp();
     conn.execute(
-        "UPDATE sessions SET end_time = ?1 WHERE end_time IS NULL",
-        rusqlite::params![now],
+        "UPDATE sessions SET end_time = ?1 WHERE id = ?2",
+        rusqlite::params![now, active.id],
     )?;
 
     let mut stmt = conn.prepare(
-        "SELECT id, task, tag, start_time, end_time FROM sessions WHERE end_time = ?1 ORDER BY id DESC LIMIT 1",
+        "SELECT id, task, tag, start_time, end_time FROM sessions WHERE id = ?1",
     )?;
     let (id, task, tag, start_epoch, end_epoch) =
-        stmt.query_row(rusqlite::params![now], |row| {
+        stmt.query_row(rusqlite::params![active.id], |row| {
             Ok((
                 row.get::<_, i64>(0)?,
                 row.get::<_, String>(1)?,
@@ -231,6 +237,24 @@ mod tests {
         )
         .unwrap();
         conn.last_insert_rowid()
+    }
+
+    // stop_session tests
+    #[test]
+    fn stop_session_returns_correct_session() {
+        let (conn, _f) = test_db();
+        let id = insert_active(&conn, "my task");
+        let session = stop_session(&conn).expect("should stop active session");
+        assert_eq!(session.id, id);
+        assert_eq!(session.task, "my task");
+        assert!(session.end_time.is_some());
+    }
+
+    #[test]
+    fn stop_session_no_active_returns_error() {
+        let (conn, _f) = test_db();
+        let err = stop_session(&conn).unwrap_err();
+        assert!(err.to_string().contains("No active session"));
     }
 
     // delete_session tests (T003)
