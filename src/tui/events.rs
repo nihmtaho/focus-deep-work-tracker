@@ -558,21 +558,147 @@ pub fn handle_pomodoro_tab(
 }
 
 pub fn handle_settings_tab(app: &mut App, key: KeyEvent) -> Result<bool> {
-    if key.code == KeyCode::Char('v') || key.code == KeyCode::Char('V') {
-        app.config.vim_mode = !app.config.vim_mode;
-        let msg = if app.config.vim_mode {
-            "Vim mode enabled"
-        } else {
-            "Vim mode disabled"
-        };
-        let path = crate::config::config_file_path();
-        if let Err(e) = save_config(&path, &app.config) {
-            app.message = Some(MessageOverlay::error(format!(
-                "Failed to save settings: {e}"
-            )));
-        } else {
-            app.message = Some(MessageOverlay::success(msg));
+    use crate::pomodoro::config::{pomodoro_config_path, save_to_file};
+    use crate::tui::views::settings::SETTINGS_ROW_COUNT;
+
+    match key.code {
+        // Navigation
+        KeyCode::Up | KeyCode::Char('k') => {
+            if app.settings_selected > 0 {
+                app.settings_selected -= 1;
+            }
         }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if app.settings_selected + 1 < SETTINGS_ROW_COUNT {
+                app.settings_selected += 1;
+            }
+        }
+
+        // Toggle vim mode (row 0, or 'V' always works)
+        KeyCode::Char('v') | KeyCode::Char('V') if app.settings_selected == 0 => {
+            app.config.vim_mode = !app.config.vim_mode;
+            let msg = if app.config.vim_mode {
+                "Vim mode enabled"
+            } else {
+                "Vim mode disabled"
+            };
+            let path = crate::config::config_file_path();
+            if let Err(e) = save_config(&path, &app.config) {
+                app.message = Some(MessageOverlay::error(format!(
+                    "Failed to save settings: {e}"
+                )));
+            } else {
+                app.message = Some(MessageOverlay::success(msg));
+            }
+        }
+
+        // Also allow Enter to toggle vim when selected
+        KeyCode::Enter if app.settings_selected == 0 => {
+            app.config.vim_mode = !app.config.vim_mode;
+            let msg = if app.config.vim_mode {
+                "Vim mode enabled"
+            } else {
+                "Vim mode disabled"
+            };
+            let path = crate::config::config_file_path();
+            if let Err(e) = save_config(&path, &app.config) {
+                app.message = Some(MessageOverlay::error(format!("Failed to save: {e}")));
+            } else {
+                app.message = Some(MessageOverlay::success(msg));
+            }
+        }
+
+        // Increase value for Pomodoro rows
+        KeyCode::Char('+') | KeyCode::Char('=') | KeyCode::Right => {
+            let changed = match app.settings_selected {
+                1 => {
+                    if app.pomo_config.work_duration_mins < 120 {
+                        app.pomo_config.work_duration_mins += 1;
+                        true
+                    } else {
+                        false
+                    }
+                }
+                2 => {
+                    if app.pomo_config.break_duration_mins < 60 {
+                        app.pomo_config.break_duration_mins += 1;
+                        true
+                    } else {
+                        false
+                    }
+                }
+                3 => {
+                    if app.pomo_config.long_break_duration_mins < 60 {
+                        app.pomo_config.long_break_duration_mins += 1;
+                        true
+                    } else {
+                        false
+                    }
+                }
+                4 => {
+                    if app.pomo_config.long_break_after < 10 {
+                        app.pomo_config.long_break_after += 1;
+                        true
+                    } else {
+                        false
+                    }
+                }
+                _ => false,
+            };
+            if changed {
+                let path = pomodoro_config_path();
+                if let Err(e) = save_to_file(&path, &app.pomo_config) {
+                    app.message = Some(MessageOverlay::error(format!("Failed to save: {e}")));
+                }
+            }
+        }
+
+        // Decrease value for Pomodoro rows
+        KeyCode::Char('-') | KeyCode::Left => {
+            let changed = match app.settings_selected {
+                1 => {
+                    if app.pomo_config.work_duration_mins > 1 {
+                        app.pomo_config.work_duration_mins -= 1;
+                        true
+                    } else {
+                        false
+                    }
+                }
+                2 => {
+                    if app.pomo_config.break_duration_mins > 1 {
+                        app.pomo_config.break_duration_mins -= 1;
+                        true
+                    } else {
+                        false
+                    }
+                }
+                3 => {
+                    if app.pomo_config.long_break_duration_mins > 1 {
+                        app.pomo_config.long_break_duration_mins -= 1;
+                        true
+                    } else {
+                        false
+                    }
+                }
+                4 => {
+                    if app.pomo_config.long_break_after > 2 {
+                        app.pomo_config.long_break_after -= 1;
+                        true
+                    } else {
+                        false
+                    }
+                }
+                _ => false,
+            };
+            if changed {
+                let path = pomodoro_config_path();
+                if let Err(e) = save_to_file(&path, &app.pomo_config) {
+                    app.message = Some(MessageOverlay::error(format!("Failed to save: {e}")));
+                }
+            }
+        }
+
+        _ => {}
     }
     Ok(false)
 }

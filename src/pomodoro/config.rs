@@ -41,6 +41,16 @@ pub fn load_from_file(path: &Path) -> PomodoroConfig {
     toml::from_str(&data).unwrap_or_default()
 }
 
+/// Persist config to a TOML file, creating parent directories as needed.
+pub fn save_to_file(path: &Path, cfg: &PomodoroConfig) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let toml_str = toml::to_string_pretty(cfg)?;
+    std::fs::write(path, toml_str)?;
+    Ok(())
+}
+
 impl PomodoroConfig {
     /// Override fields from `FOCUS_POMODORO_*` environment variables.
     pub fn apply_env(&mut self) {

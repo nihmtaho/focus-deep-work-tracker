@@ -80,6 +80,10 @@ fn run_app(
 
     let mut app = App::new(no_color, config);
 
+    // Load Pomodoro defaults from file
+    app.pomo_config =
+        crate::pomodoro::config::load_from_file(&crate::pomodoro::config::pomodoro_config_path());
+
     // Load initial dashboard data
     app.load_dashboard(conn)?;
 

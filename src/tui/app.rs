@@ -2,6 +2,7 @@ use std::time::Instant;
 
 use crate::config::AppConfig;
 use crate::models::session::Session;
+use crate::pomodoro::config::PomodoroConfig;
 use crate::pomodoro::timer::PomodoroTimer;
 
 // ── Time window ────────────────────────────────────────────────────────────────
@@ -167,6 +168,10 @@ pub struct App {
     pub no_color: bool,
     /// Active Pomodoro timer (Some while a session is running in Pomodoro mode).
     pub pomodoro_timer: Option<PomodoroTimer>,
+    /// Currently loaded Pomodoro default config (for the Settings tab).
+    pub pomo_config: PomodoroConfig,
+    /// Selected row index in the Settings tab (0=vim, 1=work, 2=break, 3=long_break, 4=long_break_after).
+    pub settings_selected: usize,
 }
 
 pub const LOG_PAGE_SIZE: usize = 10;
@@ -192,6 +197,8 @@ impl App {
             terminal_too_small: false,
             no_color,
             pomodoro_timer: None,
+            pomo_config: PomodoroConfig::default(),
+            settings_selected: 0,
         }
     }
 
