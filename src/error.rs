@@ -23,6 +23,14 @@ pub enum FocusError {
     #[error("Session #{id} not found.")]
     SessionNotFound { id: i64 },
 
+    #[error("--{field} must be between {min} and {max} minutes (got {value}).")]
+    InvalidPomoDuration {
+        field: String,
+        value: u32,
+        min: u32,
+        max: u32,
+    },
+
     #[error(transparent)]
     Db(#[from] rusqlite::Error),
 

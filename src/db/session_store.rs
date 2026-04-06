@@ -10,6 +10,7 @@ fn row_to_session(
     tag: Option<String>,
     start_epoch: i64,
     end_epoch: Option<i64>,
+    mode: String,
 ) -> Session {
     let start_time = Utc
         .timestamp_opt(start_epoch, 0)
@@ -22,21 +23,39 @@ fn row_to_session(
         tag,
         start_time,
         end_time,
+        mode,
     }
 }
 
 pub fn insert_session(conn: &Connection, task: &str, tag: Option<&str>) -> Result<()> {
     let now = Utc::now().timestamp();
     conn.execute(
-        "INSERT INTO sessions (task, tag, start_time) VALUES (?1, ?2, ?3)",
+        "INSERT INTO sessions (task, tag, start_time, mode) VALUES (?1, ?2, ?3, 'freeform')",
         rusqlite::params![task, tag, now],
     )?;
     Ok(())
 }
 
+/// Insert a completed session with explicit start/end times and mode.
+/// Returns the inserted row id.
+pub fn insert_session_with_times(
+    conn: &Connection,
+    task: &str,
+    tag: Option<&str>,
+    mode: &str,
+    start_epoch: i64,
+    end_epoch: i64,
+) -> Result<i64> {
+    conn.execute(
+        "INSERT INTO sessions (task, tag, start_time, end_time, mode) VALUES (?1, ?2, ?3, ?4, ?5)",
+        rusqlite::params![task, tag, start_epoch, end_epoch, mode],
+    )?;
+    Ok(conn.last_insert_rowid())
+}
+
 pub fn get_active_session(conn: &Connection) -> Result<Option<Session>> {
     let mut stmt = conn.prepare(
-        "SELECT id, task, tag, start_time, end_time FROM sessions WHERE end_time IS NULL LIMIT 1",
+        "SELECT id, task, tag, start_time, end_time, mode FROM sessions WHERE end_time IS NULL LIMIT 1",
     )?;
     let mut rows = stmt.query_map([], |row| {
         Ok((
@@ -45,12 +64,20 @@ pub fn get_active_session(conn: &Connection) -> Result<Option<Session>> {
             row.get::<_, Option<String>>(2)?,
             row.get::<_, i64>(3)?,
             row.get::<_, Option<i64>>(4)?,
+            row.get::<_, String>(5)?,
         ))
     })?;
 
     if let Some(row) = rows.next() {
-        let (id, task, tag, start_epoch, end_epoch) = row?;
-        Ok(Some(row_to_session(id, task, tag, start_epoch, end_epoch)))
+        let (id, task, tag, start_epoch, end_epoch, mode) = row?;
+        Ok(Some(row_to_session(
+            id,
+            task,
+            tag,
+            start_epoch,
+            end_epoch,
+            mode,
+        )))
     } else {
         Ok(None)
     }
@@ -60,8 +87,8 @@ pub fn stop_session(conn: &Connection) -> Result<Session> {
     // Capture the active session's ID before updating so we can fetch it back
     // precisely. Using a timestamp as the join key is unsafe — two sessions
     // could share the same end_time second.
-    let active = get_active_session(conn)?
-        .ok_or_else(|| anyhow::anyhow!("No active session to stop"))?;
+    let active =
+        get_active_session(conn)?.ok_or_else(|| anyhow::anyhow!("No active session to stop"))?;
 
     let now = Utc::now().timestamp();
     conn.execute(
@@ -69,10 +96,9 @@ pub fn stop_session(conn: &Connection) -> Result<Session> {
         rusqlite::params![now, active.id],
     )?;
 
-    let mut stmt = conn.prepare(
-        "SELECT id, task, tag, start_time, end_time FROM sessions WHERE id = ?1",
-    )?;
-    let (id, task, tag, start_epoch, end_epoch) =
+    let mut stmt = conn
+        .prepare("SELECT id, task, tag, start_time, end_time, mode FROM sessions WHERE id = ?1")?;
+    let (id, task, tag, start_epoch, end_epoch, mode) =
         stmt.query_row(rusqlite::params![active.id], |row| {
             Ok((
                 row.get::<_, i64>(0)?,
@@ -80,15 +106,16 @@ pub fn stop_session(conn: &Connection) -> Result<Session> {
                 row.get::<_, Option<String>>(2)?,
                 row.get::<_, i64>(3)?,
                 row.get::<_, Option<i64>>(4)?,
+                row.get::<_, String>(5)?,
             ))
         })?;
 
-    Ok(row_to_session(id, task, tag, start_epoch, end_epoch))
+    Ok(row_to_session(id, task, tag, start_epoch, end_epoch, mode))
 }
 
 pub fn list_sessions(conn: &Connection, limit: u32) -> Result<Vec<Session>> {
     let mut stmt = conn.prepare(
-        "SELECT id, task, tag, start_time, end_time FROM sessions WHERE end_time IS NOT NULL ORDER BY start_time DESC, id DESC LIMIT ?1",
+        "SELECT id, task, tag, start_time, end_time, mode FROM sessions WHERE end_time IS NOT NULL ORDER BY start_time DESC, id DESC LIMIT ?1",
     )?;
     let rows = stmt.query_map(rusqlite::params![limit], |row| {
         Ok((
@@ -97,13 +124,14 @@ pub fn list_sessions(conn: &Connection, limit: u32) -> Result<Vec<Session>> {
             row.get::<_, Option<String>>(2)?,
             row.get::<_, i64>(3)?,
             row.get::<_, Option<i64>>(4)?,
+            row.get::<_, String>(5)?,
         ))
     })?;
 
     let mut sessions = Vec::new();
     for row in rows {
-        let (id, task, tag, start_epoch, end_epoch) = row?;
-        sessions.push(row_to_session(id, task, tag, start_epoch, end_epoch));
+        let (id, task, tag, start_epoch, end_epoch, mode) = row?;
+        sessions.push(row_to_session(id, task, tag, start_epoch, end_epoch, mode));
     }
     Ok(sessions)
 }
@@ -163,7 +191,7 @@ pub fn rename_session(conn: &Connection, id: i64, new_task: &str) -> Result<()> 
 
 pub fn list_all_completed(conn: &Connection) -> Result<Vec<Session>> {
     let mut stmt = conn.prepare(
-        "SELECT id, task, tag, start_time, end_time FROM sessions WHERE end_time IS NOT NULL ORDER BY start_time ASC, id ASC",
+        "SELECT id, task, tag, start_time, end_time, mode FROM sessions WHERE end_time IS NOT NULL ORDER BY start_time ASC, id ASC",
     )?;
     let rows = stmt.query_map([], |row| {
         Ok((
@@ -172,13 +200,14 @@ pub fn list_all_completed(conn: &Connection) -> Result<Vec<Session>> {
             row.get::<_, Option<String>>(2)?,
             row.get::<_, i64>(3)?,
             row.get::<_, Option<i64>>(4)?,
+            row.get::<_, String>(5)?,
         ))
     })?;
 
     let mut sessions = Vec::new();
     for row in rows {
-        let (id, task, tag, start_epoch, end_epoch) = row?;
-        sessions.push(row_to_session(id, task, tag, start_epoch, end_epoch));
+        let (id, task, tag, start_epoch, end_epoch, mode) = row?;
+        sessions.push(row_to_session(id, task, tag, start_epoch, end_epoch, mode));
     }
     Ok(sessions)
 }
@@ -186,7 +215,7 @@ pub fn list_all_completed(conn: &Connection) -> Result<Vec<Session>> {
 /// List completed sessions that started at or after `since` (Unix epoch), newest first.
 pub fn list_completed_since(conn: &Connection, since: i64) -> Result<Vec<Session>> {
     let mut stmt = conn.prepare(
-        "SELECT id, task, tag, start_time, end_time FROM sessions \
+        "SELECT id, task, tag, start_time, end_time, mode FROM sessions \
          WHERE end_time IS NOT NULL AND start_time >= ?1 \
          ORDER BY start_time DESC, id DESC",
     )?;
@@ -197,12 +226,13 @@ pub fn list_completed_since(conn: &Connection, since: i64) -> Result<Vec<Session
             row.get::<_, Option<String>>(2)?,
             row.get::<_, i64>(3)?,
             row.get::<_, Option<i64>>(4)?,
+            row.get::<_, String>(5)?,
         ))
     })?;
     let mut sessions = Vec::new();
     for row in rows {
-        let (id, task, tag, start_epoch, end_epoch) = row?;
-        sessions.push(row_to_session(id, task, tag, start_epoch, end_epoch));
+        let (id, task, tag, start_epoch, end_epoch, mode) = row?;
+        sessions.push(row_to_session(id, task, tag, start_epoch, end_epoch, mode));
     }
     Ok(sessions)
 }

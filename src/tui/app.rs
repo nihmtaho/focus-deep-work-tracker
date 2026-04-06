@@ -2,6 +2,7 @@ use std::time::Instant;
 
 use crate::config::AppConfig;
 use crate::models::session::Session;
+use crate::pomodoro::timer::PomodoroTimer;
 
 // ── Time window ────────────────────────────────────────────────────────────────
 
@@ -70,6 +71,7 @@ pub enum Tab {
     Log,
     Report,
     Settings,
+    Pomodoro,
 }
 
 // ── PromptAction ───────────────────────────────────────────────────────────────
@@ -83,6 +85,12 @@ pub enum PromptAction {
     },
     RenameSession {
         id: i64,
+    },
+    /// First step for Pomodoro: gathering task name.
+    StartPomodoroName,
+    /// Second step for Pomodoro: entering optional tag.
+    StartPomodoroTag {
+        task: String,
     },
 }
 
@@ -101,6 +109,13 @@ pub enum Overlay {
         session_name: String,
     },
     Help,
+    /// Mode selector shown when user presses 'n' on Dashboard.
+    ModeSelector {
+        /// 0 = Freeform, 1 = Pomodoro
+        cursor: usize,
+    },
+    /// Confirm stopping an in-progress Pomodoro work phase.
+    PomodoroConfirmStop,
 }
 
 impl Overlay {
@@ -150,6 +165,8 @@ pub struct App {
     pub quit_pending: bool,
     pub terminal_too_small: bool,
     pub no_color: bool,
+    /// Active Pomodoro timer (Some while a session is running in Pomodoro mode).
+    pub pomodoro_timer: Option<PomodoroTimer>,
 }
 
 pub const LOG_PAGE_SIZE: usize = 10;
@@ -174,6 +191,7 @@ impl App {
             quit_pending: false,
             terminal_too_small: false,
             no_color,
+            pomodoro_timer: None,
         }
     }
 

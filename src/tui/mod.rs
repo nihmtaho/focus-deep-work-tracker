@@ -130,8 +130,40 @@ fn run_app(
                 _ => {}
             }
         } else {
-            // Tick: update dashboard data
-            if app.active_tab == Tab::Dashboard {
+            // Tick: update dashboard data or pomodoro timer
+            if app.active_tab == Tab::Pomodoro {
+                if let Some(ref mut timer) = app.pomodoro_timer {
+                    let events = timer.tick_secs(1, conn)?;
+                    for event in events {
+                        use crate::pomodoro::timer::TimerEvent;
+                        match event {
+                            TimerEvent::PhaseComplete { to, .. } => {
+                                use crate::models::pomodoro::PomodoroPhase;
+                                let (title, body) = match to {
+                                    PomodoroPhase::Work => ("Focus!", "Break over — time to work."),
+                                    PomodoroPhase::Break => ("Break time!", "Work phase complete."),
+                                    PomodoroPhase::LongBreak => {
+                                        ("Long break!", "Take a longer rest.")
+                                    }
+                                };
+                                app.message = Some(crate::tui::app::MessageOverlay::success(
+                                    body.to_string(),
+                                ));
+                                crate::pomodoro::notify::send_notification(title, body);
+                            }
+                            TimerEvent::AutoAbandoned { .. } => {
+                                app.pomodoro_timer = None;
+                                app.active_tab = Tab::Dashboard;
+                                let _ = app.load_dashboard(conn);
+                                app.message = Some(crate::tui::app::MessageOverlay::error(
+                                    "Pomodoro abandoned: paused too long.",
+                                ));
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            } else if app.active_tab == Tab::Dashboard {
                 app.tick_dashboard(conn)?;
             }
         }

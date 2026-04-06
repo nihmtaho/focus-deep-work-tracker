@@ -13,13 +13,28 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Start a new work session
+    /// Start a new work session (add --pomodoro for Pomodoro mode)
     Start {
         /// Description of the work to be done
         task: String,
         /// Category label for the session
         #[arg(short, long)]
         tag: Option<String>,
+        /// Enable Pomodoro timer mode
+        #[arg(long)]
+        pomodoro: bool,
+        /// Work phase duration in minutes (1–120, Pomodoro mode only)
+        #[arg(long)]
+        work: Option<u32>,
+        /// Break phase duration in minutes (1–60, Pomodoro mode only)
+        #[arg(long, name = "break")]
+        break_mins: Option<u32>,
+        /// Long break duration in minutes (1–60, Pomodoro mode only)
+        #[arg(long)]
+        long_break: Option<u32>,
+        /// Number of work phases before a long break (Pomodoro mode only)
+        #[arg(long)]
+        long_break_after: Option<u32>,
     },
     /// Stop the current active session
     Stop,
@@ -46,6 +61,15 @@ enum Commands {
         #[arg(short, long)]
         format: String,
     },
+    /// Show Pomodoro statistics
+    PomoStats {
+        /// Show today's statistics (default)
+        #[arg(long, conflicts_with = "week")]
+        today: bool,
+        /// Show past 7 days as a daily breakdown
+        #[arg(long, conflicts_with = "today")]
+        week: bool,
+    },
     /// Launch interactive TUI dashboard
     Ui,
 }
@@ -63,12 +87,35 @@ fn run(cli: Cli) -> Result<()> {
     let conn = db::open_db()?;
 
     match cli.command {
-        Commands::Start { task, tag } => commands::start::run(&conn, task, tag)?,
+        Commands::Start {
+            task,
+            tag,
+            pomodoro,
+            work,
+            break_mins,
+            long_break,
+            long_break_after,
+        } => {
+            if pomodoro {
+                commands::start::run_pomodoro(
+                    &conn,
+                    task,
+                    tag,
+                    work,
+                    break_mins,
+                    long_break,
+                    long_break_after,
+                )?;
+            } else {
+                commands::start::run(&conn, task, tag)?;
+            }
+        }
         Commands::Stop => commands::stop::run(&conn)?,
         Commands::Status => commands::status::run(&conn)?,
         Commands::Log { limit } => commands::log::run(&conn, limit)?,
         Commands::Report { today, week } => commands::report::run(&conn, today, week)?,
         Commands::Export { format } => commands::export::run(&conn, format)?,
+        Commands::PomoStats { today, week } => commands::pomo_stats::run(&conn, today, week)?,
         Commands::Ui => focus::tui::run(conn)?,
     }
 

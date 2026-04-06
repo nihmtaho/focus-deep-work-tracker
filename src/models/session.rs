@@ -8,6 +8,7 @@ pub struct Session {
     pub tag: Option<String>,
     pub start_time: DateTime<Utc>,
     pub end_time: Option<DateTime<Utc>>,
+    pub mode: String,
 }
 
 #[allow(dead_code)]

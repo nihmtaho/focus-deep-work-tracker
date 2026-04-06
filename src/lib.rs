@@ -5,4 +5,5 @@ pub mod db;
 pub mod display;
 pub mod error;
 pub mod models;
+pub mod pomodoro;
 pub mod tui;
