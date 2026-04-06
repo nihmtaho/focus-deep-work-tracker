@@ -23,7 +23,14 @@ pub fn handle_key_event(app: &mut App, conn: &rusqlite::Connection, key: KeyEven
 
     // Global keys (no overlay)
     match key.code {
-        KeyCode::Char('q') | KeyCode::Char('Q') => return Ok(true),
+        KeyCode::Char('q') | KeyCode::Char('Q') => {
+            // If Pomodoro timer is active, let the Pomodoro tab handle Q
+            // so it can show the confirm-stop dialog instead of quitting.
+            if app.active_tab == Tab::Pomodoro && app.pomodoro_timer.is_some() {
+                return handle_pomodoro_tab(app, conn, key);
+            }
+            return Ok(true);
+        }
         KeyCode::Char('?') => {
             app.overlay = Overlay::Help;
             return Ok(false);
