@@ -1,14 +1,16 @@
 # Changelog
 
-## [1.2.0] - April 07, 2026
-
-### Added
-- feat: implement Pomodoro timer mode with CLI and TUI support (#5)
-
-
-
 All notable changes to this project are documented here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.2.1] - April 07, 2026
+
+### Technical
+
+- **Release**: Implemented Git Flow release workflow with Conventional Commits validation
+- **Release**: Added GitHub Actions CI/CD: `ci.yml` runs clippy + tests on PR/push, `release.yml` builds cross-platform binaries (Linux/macOS/Windows) and publishes to GitHub Releases
+- **Release**: Makefile with `make setup` (install git hooks), `make test`, `make lint`, `make release VERSION=x.y.z`
+- **Developer**: Local commit-msg hook enforces Conventional Commits format (`feat:`, `fix:`, `docs:`, etc.)
+- **Developer**: `.gitignore` updated to exclude release artifacts and in-progress specs directories
 ## [Unreleased]
 
 ### Added
