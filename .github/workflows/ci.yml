@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - develop
+
+jobs:
+  lint:
+    name: Lint (clippy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy -- -D warnings
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test
+
+  validate-commits:
+    name: Validate Commit Messages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate commit messages
+        shell: bash
+        run: |
+          PATTERN="^(feat|fix|docs|style|refactor|perf|test|chore|ci)(\(.+\))?(!)?: .+"
+          FAILED=0
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+            COMMITS=$(git log --format="%s" "${BASE}..${HEAD}")
+          else
+            COMMITS=$(git log --format="%s" -1)
+          fi
+
+          while IFS= read -r msg; do
+            [ -z "$msg" ] && continue
+            # Skip merge/revert commits
+            case "$msg" in
+              Merge\ *|Revert\ *) echo "⏭  Skip: $msg"; continue ;;
+            esac
+            if echo "$msg" | grep -qE "$PATTERN"; then
+              echo "✅  Valid: $msg"
+            else
+              echo "❌  Invalid: $msg"
+              FAILED=1
+            fi
+          done <<< "$COMMITS"
+
+          if [ "$FAILED" -eq 1 ]; then
+            echo ""
+            echo "One or more commit messages do not follow Conventional Commits."
+            echo "Format: <type>(<scope>): <subject>"
+            echo "Types:  feat | fix | docs | style | refactor | perf | test | chore | ci"
+            exit 1
+          fi
