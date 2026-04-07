@@ -1,3 +1,4 @@
+pub mod pomodoro_store;
 pub mod session_store;
 
 use anyhow::Result;
@@ -29,16 +30,46 @@ pub fn open_db_at(db_path: &std::path::Path) -> Result<Connection> {
             task       TEXT    NOT NULL,
             tag        TEXT,
             start_time INTEGER NOT NULL,
-            end_time   INTEGER
+            end_time   INTEGER,
+            mode       TEXT    NOT NULL DEFAULT 'freeform'
         );
         CREATE INDEX IF NOT EXISTS idx_sessions_end_time
             ON sessions(end_time);
         CREATE INDEX IF NOT EXISTS idx_sessions_start_time
-            ON sessions(start_time DESC);",
+            ON sessions(start_time DESC);
+        CREATE TABLE IF NOT EXISTS pomodoro_stats (
+            date          TEXT    PRIMARY KEY,
+            completed     INTEGER NOT NULL DEFAULT 0,
+            abandoned     INTEGER NOT NULL DEFAULT 0,
+            work_minutes  INTEGER NOT NULL DEFAULT 0,
+            break_minutes INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_pomodoro_stats_date
+            ON pomodoro_stats(date);",
     )
     .map_err(|_| FocusError::DataFileCorrupted {
         path: db_path.display().to_string(),
     })?;
+
+    // Idempotent migration: add mode column to pre-existing sessions tables
+    // (the CREATE TABLE above already includes it for new DBs).
+    let mode_col_exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='mode'",
+            [],
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+
+    if !mode_col_exists {
+        conn.execute_batch(
+            "ALTER TABLE sessions ADD COLUMN mode TEXT NOT NULL DEFAULT 'freeform';",
+        )
+        .map_err(|_| FocusError::DataFileCorrupted {
+            path: db_path.display().to_string(),
+        })?;
+    }
 
     Ok(conn)
 }

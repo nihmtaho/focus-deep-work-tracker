@@ -80,8 +80,15 @@ fn run_app(
 
     let mut app = App::new(no_color, config);
 
+    // Load Pomodoro defaults from file
+    app.pomo_config =
+        crate::pomodoro::config::load_from_file(&crate::pomodoro::config::pomodoro_config_path());
+
     // Load initial dashboard data
     app.load_dashboard(conn)?;
+
+    // Track real elapsed time for the Pomodoro timer tick.
+    let mut last_tick = std::time::Instant::now();
 
     loop {
         // Check signal
@@ -117,8 +124,9 @@ fn run_app(
         // Draw current state
         terminal.draw(|frame| render(frame, &app))?;
 
-        // Poll for events with 100ms timeout (for timer ticks)
-        if event::poll(Duration::from_millis(100))? {
+        // Poll for events with 250ms timeout — short enough to feel responsive,
+        // long enough to avoid burning CPU.
+        if event::poll(Duration::from_millis(250))? {
             match event::read()? {
                 Event::Key(key) => {
                     let should_quit = handle_key_event(&mut app, conn, key)?;
@@ -129,9 +137,47 @@ fn run_app(
                 Event::Resize(_, _) => {}
                 _ => {}
             }
-        } else {
-            // Tick: update dashboard data
-            if app.active_tab == Tab::Dashboard {
+        }
+
+        // Always advance the Pomodoro timer by however many whole seconds have
+        // actually elapsed since the last tick — regardless of whether a key was pressed.
+        let elapsed_secs = last_tick.elapsed().as_secs();
+        if elapsed_secs >= 1 {
+            last_tick += Duration::from_secs(elapsed_secs);
+
+            if app.active_tab == Tab::Pomodoro {
+                if let Some(ref mut timer) = app.pomodoro_timer {
+                    let events = timer.tick_secs(elapsed_secs, conn)?;
+                    for event in events {
+                        use crate::pomodoro::timer::TimerEvent;
+                        match event {
+                            TimerEvent::PhaseComplete { to, .. } => {
+                                use crate::models::pomodoro::PomodoroPhase;
+                                let (title, body) = match to {
+                                    PomodoroPhase::Work => ("Focus!", "Break over — time to work."),
+                                    PomodoroPhase::Break => ("Break time!", "Work phase complete."),
+                                    PomodoroPhase::LongBreak => {
+                                        ("Long break!", "Take a longer rest.")
+                                    }
+                                };
+                                app.message = Some(crate::tui::app::MessageOverlay::success(
+                                    body.to_string(),
+                                ));
+                                crate::pomodoro::notify::send_notification(title, body);
+                            }
+                            TimerEvent::AutoAbandoned { .. } => {
+                                app.pomodoro_timer = None;
+                                app.active_tab = Tab::Dashboard;
+                                let _ = app.load_dashboard(conn);
+                                app.message = Some(crate::tui::app::MessageOverlay::error(
+                                    "Pomodoro abandoned: paused too long.",
+                                ));
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            } else if app.active_tab == Tab::Dashboard {
                 app.tick_dashboard(conn)?;
             }
         }
