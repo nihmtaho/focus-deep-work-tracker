@@ -179,10 +179,25 @@ git push origin v<version>
 
 GitHub Actions (`release.yml`) will now:
 1. Build binaries for Linux x86_64, macOS x86_64, macOS arm64, Windows x86_64
-2. Run `git cliff --latest` for release notes (fallback)
-3. Create GitHub Release with binaries attached
+2. Package artifacts
+3. Create GitHub Release with binaries and release notes
 
 Watch: https://github.com/nihmtaho/focus-deep-work-tracker/actions
+
+**If GitHub Actions fails or is slow:** Manually create the release:
+```bash
+# Check workflow status first
+gh run list --workflow release.yml | head -3
+
+# If needed, create release manually with committed RELEASE_NOTES.md
+gh release create v<version> --notes-file RELEASE_NOTES.md
+
+# Download artifacts from GitHub Actions and upload
+gh run download <RUN_ID> --dir /tmp/release-binaries
+gh release upload v<version> /tmp/release-binaries/**/*
+```
+
+This is a fallback — normally GitHub Actions handles it automatically.
 
 ---
 
