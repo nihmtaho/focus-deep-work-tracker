@@ -2,9 +2,11 @@ use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::config::save_config;
-use crate::db::session_store;
+use crate::db::{pomodoro_store, session_store};
 use crate::display::format::format_elapsed;
 use crate::error::FocusError;
+use crate::pomodoro::config::PomodoroConfig;
+use crate::pomodoro::timer::PomodoroTimer;
 use crate::tui::app::{idx_to_window, App, MessageOverlay, Overlay, PromptAction, Tab};
 
 /// Handle a key event. Returns true if the app should quit.
@@ -21,7 +23,14 @@ pub fn handle_key_event(app: &mut App, conn: &rusqlite::Connection, key: KeyEven
 
     // Global keys (no overlay)
     match key.code {
-        KeyCode::Char('q') | KeyCode::Char('Q') => return Ok(true),
+        KeyCode::Char('q') | KeyCode::Char('Q') => {
+            // If Pomodoro timer is active, let the Pomodoro tab handle Q
+            // so it can show the confirm-stop dialog instead of quitting.
+            if app.active_tab == Tab::Pomodoro && app.pomodoro_timer.is_some() {
+                return handle_pomodoro_tab(app, conn, key);
+            }
+            return Ok(true);
+        }
         KeyCode::Char('?') => {
             app.overlay = Overlay::Help;
             return Ok(false);
@@ -49,12 +58,17 @@ pub fn handle_key_event(app: &mut App, conn: &rusqlite::Connection, key: KeyEven
             app.active_tab = Tab::Settings;
             return Ok(false);
         }
+        KeyCode::Char('5') => {
+            app.active_tab = Tab::Pomodoro;
+            return Ok(false);
+        }
         KeyCode::Tab => {
             app.active_tab = match app.active_tab {
                 Tab::Dashboard => Tab::Log,
                 Tab::Log => Tab::Report,
                 Tab::Report => Tab::Settings,
-                Tab::Settings => Tab::Dashboard,
+                Tab::Settings => Tab::Pomodoro,
+                Tab::Pomodoro => Tab::Dashboard,
             };
             // Load data when switching to data tabs
             match app.active_tab {
@@ -71,10 +85,11 @@ pub fn handle_key_event(app: &mut App, conn: &rusqlite::Connection, key: KeyEven
         }
         KeyCode::BackTab => {
             app.active_tab = match app.active_tab {
-                Tab::Dashboard => Tab::Settings,
+                Tab::Dashboard => Tab::Pomodoro,
                 Tab::Log => Tab::Dashboard,
                 Tab::Report => Tab::Log,
                 Tab::Settings => Tab::Report,
+                Tab::Pomodoro => Tab::Settings,
             };
             match app.active_tab {
                 Tab::Log => {
@@ -98,6 +113,7 @@ pub fn handle_key_event(app: &mut App, conn: &rusqlite::Connection, key: KeyEven
         Tab::Log => handle_log_tab(app, conn, key),
         Tab::Report => handle_report_tab(app, conn, key),
         Tab::Settings => handle_settings_tab(app, key),
+        Tab::Pomodoro => handle_pomodoro_tab(app, conn, key),
     }
 }
 
@@ -112,6 +128,8 @@ fn handle_overlay(app: &mut App, conn: &rusqlite::Connection, key: KeyEvent) -> 
             app.overlay = Overlay::None;
             Ok(false)
         }
+        Overlay::ModeSelector { .. } => handle_overlay_mode_selector(app, conn, key),
+        Overlay::PomodoroConfirmStop => handle_overlay_pomodoro_confirm_stop(app, conn, key),
         Overlay::None => Ok(false),
     }
 }
@@ -202,6 +220,28 @@ pub fn handle_overlay_prompt(
                     }
                     app.overlay = Overlay::None;
                 }
+                PromptAction::StartPomodoroName => {
+                    // Move to tag step
+                    app.overlay = Overlay::Prompt {
+                        label: "Pomodoro — tag (optional):".to_string(),
+                        value: String::new(),
+                        action: PromptAction::StartPomodoroTag { task: task_name },
+                    };
+                }
+                PromptAction::StartPomodoroTag { task } => {
+                    let tag_opt = if value.trim().is_empty() {
+                        None
+                    } else {
+                        Some(value.trim().to_string())
+                    };
+                    let config =
+                        PomodoroConfig::resolve(None, None, None, None).unwrap_or_default();
+                    let timer = PomodoroTimer::new(task, tag_opt, config);
+                    app.pomodoro_timer = Some(timer);
+                    app.active_tab = Tab::Pomodoro;
+                    app.overlay = Overlay::None;
+                    app.message = Some(MessageOverlay::success("Pomodoro started!"));
+                }
             }
         }
         KeyCode::Char(c) => {
@@ -256,6 +296,86 @@ pub fn handle_overlay_confirm(
     Ok(false)
 }
 
+// ── Mode selector overlay ──────────────────────────────────────────────────────
+
+fn handle_overlay_mode_selector(
+    app: &mut App,
+    _conn: &rusqlite::Connection,
+    key: KeyEvent,
+) -> Result<bool> {
+    let Overlay::ModeSelector { cursor } = app.overlay.clone() else {
+        return Ok(false);
+    };
+    match key.code {
+        KeyCode::Esc => {
+            app.overlay = Overlay::None;
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            app.overlay = Overlay::ModeSelector {
+                cursor: if cursor == 0 { 1 } else { cursor - 1 },
+            };
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            app.overlay = Overlay::ModeSelector {
+                cursor: (cursor + 1) % 2,
+            };
+        }
+        KeyCode::Enter => {
+            app.overlay = Overlay::None;
+            if cursor == 0 {
+                // Freeform: open task name prompt
+                if app.active_session.is_some() {
+                    app.message = Some(MessageOverlay::warning("Session already running."));
+                } else {
+                    app.overlay = Overlay::Prompt {
+                        label: "Session name:".to_string(),
+                        value: String::new(),
+                        action: PromptAction::StartSession,
+                    };
+                }
+            } else {
+                // Pomodoro: gather task name
+                app.overlay = Overlay::Prompt {
+                    label: "Pomodoro — task name:".to_string(),
+                    value: String::new(),
+                    action: PromptAction::StartPomodoroName,
+                };
+            }
+        }
+        _ => {}
+    }
+    Ok(false)
+}
+
+// ── Pomodoro confirm stop overlay ──────────────────────────────────────────────
+
+fn handle_overlay_pomodoro_confirm_stop(
+    app: &mut App,
+    conn: &rusqlite::Connection,
+    key: KeyEvent,
+) -> Result<bool> {
+    match key.code {
+        KeyCode::Char('y') | KeyCode::Enter => {
+            if let Some(ref timer) = app.pomodoro_timer {
+                if timer.is_in_work_phase() {
+                    let date = pomodoro_store::today_local_date();
+                    let _ = pomodoro_store::increment_abandoned(conn, &date);
+                }
+            }
+            app.pomodoro_timer = None;
+            app.overlay = Overlay::None;
+            app.active_tab = Tab::Dashboard;
+            app.message = Some(MessageOverlay::warning("Pomodoro stopped."));
+            let _ = app.load_dashboard(conn);
+        }
+        KeyCode::Char('n') | KeyCode::Esc => {
+            app.overlay = Overlay::None;
+        }
+        _ => {}
+    }
+    Ok(false)
+}
+
 // ── Tab handlers ───────────────────────────────────────────────────────────────
 
 pub fn handle_dashboard_tab(
@@ -290,12 +410,12 @@ pub fn handle_dashboard_tab(
         KeyCode::Char('n') | KeyCode::Char('N') => {
             if app.active_session.is_some() {
                 app.message = Some(MessageOverlay::warning("Session already running."));
+            } else if app.pomodoro_timer.is_some() {
+                app.message = Some(MessageOverlay::warning(
+                    "Pomodoro already running. Switch to Pomodoro tab.",
+                ));
             } else {
-                app.overlay = Overlay::Prompt {
-                    label: "Session name:".to_string(),
-                    value: String::new(),
-                    action: PromptAction::StartSession,
-                };
+                app.overlay = Overlay::ModeSelector { cursor: 0 };
             }
         }
         _ => {}
@@ -397,20 +517,195 @@ pub fn handle_report_tab(
     Ok(false)
 }
 
-pub fn handle_settings_tab(app: &mut App, key: KeyEvent) -> Result<bool> {
-    if key.code == KeyCode::Char('v') || key.code == KeyCode::Char('V') {
-        app.config.vim_mode = !app.config.vim_mode;
-        let msg = if app.config.vim_mode {
-            "Vim mode enabled"
-        } else {
-            "Vim mode disabled"
-        };
-        let path = crate::config::config_file_path();
-        if let Err(e) = save_config(&path, &app.config) {
-            app.message = Some(MessageOverlay::error(format!("Failed to save settings: {e}")));
-        } else {
-            app.message = Some(MessageOverlay::success(msg));
+pub fn handle_pomodoro_tab(
+    app: &mut App,
+    conn: &rusqlite::Connection,
+    key: KeyEvent,
+) -> Result<bool> {
+    match key.code {
+        KeyCode::Char('p') | KeyCode::Char('P') => {
+            if let Some(ref mut timer) = app.pomodoro_timer {
+                if timer.paused {
+                    timer.resume();
+                } else {
+                    timer.pause();
+                }
+            }
         }
+        KeyCode::Char('s') | KeyCode::Char('S') => {
+            if let Some(ref mut timer) = app.pomodoro_timer {
+                timer.skip_break();
+            }
+        }
+        KeyCode::Char('+') => {
+            if let Some(ref mut timer) = app.pomodoro_timer {
+                timer.extend();
+            }
+        }
+        KeyCode::Char('q') | KeyCode::Char('Q') => {
+            if app.pomodoro_timer.is_some() {
+                let in_work = app
+                    .pomodoro_timer
+                    .as_ref()
+                    .is_some_and(|t| t.is_in_work_phase());
+                if in_work {
+                    app.overlay = Overlay::PomodoroConfirmStop;
+                } else {
+                    // In a break phase — stop without abandon penalty
+                    app.pomodoro_timer = None;
+                    app.active_tab = Tab::Dashboard;
+                    let _ = app.load_dashboard(conn);
+                    app.message = Some(MessageOverlay::success("Pomodoro finished."));
+                }
+            }
+        }
+        _ => {}
+    }
+    Ok(false)
+}
+
+pub fn handle_settings_tab(app: &mut App, key: KeyEvent) -> Result<bool> {
+    use crate::pomodoro::config::{pomodoro_config_path, save_to_file};
+    use crate::tui::views::settings::SETTINGS_ROW_COUNT;
+
+    match key.code {
+        // Navigation
+        KeyCode::Up | KeyCode::Char('k') => {
+            if app.settings_selected > 0 {
+                app.settings_selected -= 1;
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if app.settings_selected + 1 < SETTINGS_ROW_COUNT {
+                app.settings_selected += 1;
+            }
+        }
+
+        // Toggle vim mode (row 0, or 'V' always works)
+        KeyCode::Char('v') | KeyCode::Char('V') if app.settings_selected == 0 => {
+            app.config.vim_mode = !app.config.vim_mode;
+            let msg = if app.config.vim_mode {
+                "Vim mode enabled"
+            } else {
+                "Vim mode disabled"
+            };
+            let path = crate::config::config_file_path();
+            if let Err(e) = save_config(&path, &app.config) {
+                app.message = Some(MessageOverlay::error(format!(
+                    "Failed to save settings: {e}"
+                )));
+            } else {
+                app.message = Some(MessageOverlay::success(msg));
+            }
+        }
+
+        // Also allow Enter to toggle vim when selected
+        KeyCode::Enter if app.settings_selected == 0 => {
+            app.config.vim_mode = !app.config.vim_mode;
+            let msg = if app.config.vim_mode {
+                "Vim mode enabled"
+            } else {
+                "Vim mode disabled"
+            };
+            let path = crate::config::config_file_path();
+            if let Err(e) = save_config(&path, &app.config) {
+                app.message = Some(MessageOverlay::error(format!("Failed to save: {e}")));
+            } else {
+                app.message = Some(MessageOverlay::success(msg));
+            }
+        }
+
+        // Increase value for Pomodoro rows
+        KeyCode::Char('+') | KeyCode::Char('=') | KeyCode::Right => {
+            let changed = match app.settings_selected {
+                1 => {
+                    if app.pomo_config.work_duration_mins < 120 {
+                        app.pomo_config.work_duration_mins += 1;
+                        true
+                    } else {
+                        false
+                    }
+                }
+                2 => {
+                    if app.pomo_config.break_duration_mins < 60 {
+                        app.pomo_config.break_duration_mins += 1;
+                        true
+                    } else {
+                        false
+                    }
+                }
+                3 => {
+                    if app.pomo_config.long_break_duration_mins < 60 {
+                        app.pomo_config.long_break_duration_mins += 1;
+                        true
+                    } else {
+                        false
+                    }
+                }
+                4 => {
+                    if app.pomo_config.long_break_after < 10 {
+                        app.pomo_config.long_break_after += 1;
+                        true
+                    } else {
+                        false
+                    }
+                }
+                _ => false,
+            };
+            if changed {
+                let path = pomodoro_config_path();
+                if let Err(e) = save_to_file(&path, &app.pomo_config) {
+                    app.message = Some(MessageOverlay::error(format!("Failed to save: {e}")));
+                }
+            }
+        }
+
+        // Decrease value for Pomodoro rows
+        KeyCode::Char('-') | KeyCode::Left => {
+            let changed = match app.settings_selected {
+                1 => {
+                    if app.pomo_config.work_duration_mins > 1 {
+                        app.pomo_config.work_duration_mins -= 1;
+                        true
+                    } else {
+                        false
+                    }
+                }
+                2 => {
+                    if app.pomo_config.break_duration_mins > 1 {
+                        app.pomo_config.break_duration_mins -= 1;
+                        true
+                    } else {
+                        false
+                    }
+                }
+                3 => {
+                    if app.pomo_config.long_break_duration_mins > 1 {
+                        app.pomo_config.long_break_duration_mins -= 1;
+                        true
+                    } else {
+                        false
+                    }
+                }
+                4 => {
+                    if app.pomo_config.long_break_after > 2 {
+                        app.pomo_config.long_break_after -= 1;
+                        true
+                    } else {
+                        false
+                    }
+                }
+                _ => false,
+            };
+            if changed {
+                let path = pomodoro_config_path();
+                if let Err(e) = save_to_file(&path, &app.pomo_config) {
+                    app.message = Some(MessageOverlay::error(format!("Failed to save: {e}")));
+                }
+            }
+        }
+
+        _ => {}
     }
     Ok(false)
 }
@@ -650,6 +945,8 @@ mod tests {
         assert_eq!(app.active_tab, Tab::Report);
         handle_key_event(&mut app, &conn, make_key(KeyCode::Tab)).unwrap();
         assert_eq!(app.active_tab, Tab::Settings);
+        handle_key_event(&mut app, &conn, make_key(KeyCode::Tab)).unwrap();
+        assert_eq!(app.active_tab, Tab::Pomodoro);
         handle_key_event(&mut app, &conn, make_key(KeyCode::Tab)).unwrap();
         assert_eq!(app.active_tab, Tab::Dashboard);
     }

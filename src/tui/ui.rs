@@ -11,15 +11,21 @@ use crate::tui::views;
 
 const HELP_TEXT: &str = "\
 Global
-  1-4       Switch tab
+  1-5       Switch tab
   Tab       Next tab
   ?         Show this help
   q         Quit
   Esc       Clear message
 
 Dashboard
-  n         New session (enter name, then optional tag)
+  n         New session (choose mode)
   s/Enter   Stop active session
+
+Pomodoro
+  P         Pause / Resume
+  S         Skip break
+  +         Extend phase by 5 min
+  Q         Stop timer
 
 Log
   ↑/↓       Select row
@@ -62,6 +68,18 @@ pub fn render(frame: &mut Frame, app: &App) {
             chunks[1],
         ),
         Tab::Settings => views::settings::render(frame, app, chunks[1]),
+        Tab::Pomodoro => {
+            if let Some(ref timer) = app.pomodoro_timer {
+                views::pomodoro::render(frame, timer, app.no_color, chunks[1]);
+            } else {
+                let hint = Paragraph::new(
+                    "No Pomodoro session active. Press [N] on Dashboard to start one.",
+                )
+                .alignment(Alignment::Center)
+                .style(Style::default().fg(Color::DarkGray));
+                frame.render_widget(hint, chunks[1]);
+            }
+        }
     }
 
     // Render overlay on top
@@ -83,6 +101,7 @@ fn render_tab_bar(frame: &mut Frame, app: &App, area: Rect) {
         (Tab::Log, "[2]Log"),
         (Tab::Report, "[3]Report"),
         (Tab::Settings, "[4]Settings"),
+        (Tab::Pomodoro, "[5]Pomodoro"),
     ];
 
     let spans: Vec<Span> = tabs
@@ -118,6 +137,12 @@ fn render_overlay(frame: &mut Frame, app: &App, area: Rect) {
         }
         Overlay::Help => {
             render_help_overlay(frame, area);
+        }
+        Overlay::ModeSelector { cursor } => {
+            render_mode_selector_overlay(frame, area, *cursor);
+        }
+        Overlay::PomodoroConfirmStop => {
+            render_pomodoro_confirm_stop_overlay(frame, area);
         }
         Overlay::None => {}
     }
@@ -216,6 +241,76 @@ fn render_help_overlay(frame: &mut Frame, area: Rect) {
                 .border_style(Style::default().fg(Color::Cyan)),
         )
         .wrap(Wrap { trim: false });
+    frame.render_widget(widget, block_area);
+}
+
+fn render_mode_selector_overlay(frame: &mut Frame, area: Rect, cursor: usize) {
+    let block_area = centered_rect(50, 8, area);
+    frame.render_widget(Clear, block_area);
+
+    let modes = ["Freeform session", "Pomodoro session"];
+    let content: Vec<Line> = modes
+        .iter()
+        .enumerate()
+        .map(|(i, label)| {
+            if i == cursor {
+                Line::from(Span::styled(
+                    format!(" ▶ {label}"),
+                    Style::default()
+                        .fg(Color::Black)
+                        .bg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ))
+            } else {
+                Line::from(Span::styled(
+                    format!("   {label}"),
+                    Style::default().fg(Color::White),
+                ))
+            }
+        })
+        .chain(std::iter::once(Line::from(Span::raw(""))))
+        .chain(std::iter::once(Line::from(Span::styled(
+            "[↑/↓] Select  [Enter] Confirm  [Esc] Cancel",
+            Style::default().fg(Color::DarkGray),
+        ))))
+        .collect();
+
+    let widget = Paragraph::new(content).block(
+        Block::default()
+            .title(" New Session ")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Cyan)),
+    );
+    frame.render_widget(widget, block_area);
+}
+
+fn render_pomodoro_confirm_stop_overlay(frame: &mut Frame, area: Rect) {
+    let block_area = centered_rect(55, 5, area);
+    frame.render_widget(Clear, block_area);
+
+    let content = vec![
+        Line::from(Span::styled(
+            "Stop the current work phase?",
+            Style::default().fg(Color::Yellow),
+        )),
+        Line::from(Span::raw("")),
+        Line::from(Span::styled(
+            "This will count as an abandoned session.",
+            Style::default().fg(Color::White),
+        )),
+        Line::from(Span::raw("")),
+        Line::from(Span::styled(
+            "[Y]es  [N]o  [Esc] Cancel",
+            Style::default().fg(Color::DarkGray),
+        )),
+    ];
+
+    let widget = Paragraph::new(content).block(
+        Block::default()
+            .title(" Confirm Stop ")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Red)),
+    );
     frame.render_widget(widget, block_area);
 }
 

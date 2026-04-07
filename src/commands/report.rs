@@ -74,5 +74,37 @@ pub fn run(conn: &Connection, today: bool, week: bool) -> Result<()> {
         format_duration(Duration::seconds(grand_total))
     );
 
+    // Mode breakdown (only when both modes exist).
+    let mode_rows: Vec<(String, i64)> = {
+        let mut stmt = conn.prepare(
+            "SELECT mode, SUM(end_time - start_time) as secs \
+             FROM sessions WHERE end_time IS NOT NULL AND start_time >= ?1 \
+             GROUP BY mode ORDER BY secs DESC",
+        )?;
+        let rows = stmt.query_map(rusqlite::params![since], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })?;
+        rows.filter_map(|r| r.ok()).collect()
+    };
+
+    if mode_rows.len() > 1 {
+        println!();
+        println!("Mode Breakdown");
+        println!("{}", "─".repeat(24));
+        for (mode, secs) in &mode_rows {
+            let pct = if grand_total > 0 {
+                (*secs as f64 / grand_total as f64 * 100.0) as u32
+            } else {
+                0
+            };
+            println!(
+                "{:<10}: {} ({}%)",
+                mode,
+                format_duration(Duration::seconds(*secs)),
+                pct
+            );
+        }
+    }
+
     Ok(())
 }
