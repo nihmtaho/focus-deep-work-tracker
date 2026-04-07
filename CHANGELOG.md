@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0] - April 07, 2026
+
+### Added
+- feat: implement Pomodoro timer mode with CLI and TUI support (#5)
+
+
+
 All notable changes to this project are documented here. Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
