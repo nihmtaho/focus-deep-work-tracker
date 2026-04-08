@@ -6,73 +6,41 @@ use ratatui::{
     Frame,
 };
 
-use crate::display::format::{format_duration, format_elapsed};
+use crate::display::format::format_duration;
 use crate::tui::app::{App, MessageKind, MessageOverlay};
 
 pub fn render(frame: &mut Frame, app: &App, area: Rect) {
+    // Three-zone layout for 007-ui-refresh:
+    // Top: Controls zone (hotkey legend)
+    // Middle: Timer zone (40%) + TODO zone (60%)
+    // Bottom: Today's summary
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(1)
         .constraints([
-            Constraint::Length(3), // title
-            Constraint::Length(5), // active session
-            Constraint::Min(5),    // today summary
-            Constraint::Length(3), // help bar
+            Constraint::Length(1),      // controls/help
+            Constraint::Percentage(40), // timer + todo
+            Constraint::Min(5),         // today summary
         ])
         .split(area);
 
-    // Title
-    let title = Paragraph::new(" focus — deep work tracker ")
-        .style(
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        )
-        .block(Block::default().borders(Borders::NONE));
-    frame.render_widget(title, chunks[0]);
+    // Render controls zone at top
+    crate::tui::ui::render_controls_zone(frame, chunks[0], app);
 
-    // Active session block
-    let session_text = match &app.active_session {
-        Some(s) => {
-            let elapsed = format_elapsed(s.start_time);
-            let tag_str = s
-                .tag
-                .as_deref()
-                .map(|t| format!(" [{}]", t))
-                .unwrap_or_default();
-            vec![
-                Line::from(vec![
-                    Span::styled("  Task: ", Style::default().fg(Color::Yellow)),
-                    Span::raw(format!("{}{}", s.task, tag_str)),
-                ]),
-                Line::from(vec![
-                    Span::styled("  Elapsed: ", Style::default().fg(Color::Yellow)),
-                    Span::styled(
-                        elapsed,
-                        Style::default()
-                            .fg(Color::Green)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                ]),
-            ]
-        }
-        None => vec![Line::from(Span::styled(
-            "  No active session",
-            Style::default().fg(Color::DarkGray),
-        ))],
-    };
+    // Split middle section into timer (40%) and TODO list (60%)
+    let middle_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+        .split(chunks[1]);
 
-    let session_block = Paragraph::new(session_text)
-        .block(
-            Block::default()
-                .title(" Active Session ")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Blue)),
-        )
-        .wrap(Wrap { trim: true });
-    frame.render_widget(session_block, chunks[1]);
+    // Render timer zone (left/center)
+    crate::tui::ui::render_timer_zone(frame, middle_chunks[0], app);
 
-    // Today summary — show individual session names
+    // Render TODO zone (right)
+    crate::tui::ui::render_todo_zone(frame, middle_chunks[1], app);
+
+    // Render today's summary (bottom)
     let summary_lines: Vec<Line> = if app.today_sessions.is_empty() {
         vec![Line::from(Span::styled(
             "  No sessions today.",
@@ -120,12 +88,6 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
         )
         .wrap(Wrap { trim: true });
     frame.render_widget(summary_block, chunks[2]);
-
-    // Help bar
-    let help = Paragraph::new(" [N] New  [S] Stop  [?] Help  [Q] Quit ")
-        .style(Style::default().fg(Color::DarkGray))
-        .block(Block::default().borders(Borders::NONE));
-    frame.render_widget(help, chunks[3]);
 
     // Message overlay
     if let Some(msg) = &app.message {

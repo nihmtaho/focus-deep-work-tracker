@@ -358,3 +358,135 @@ fn render_message_overlay(
         .style(Style::default().fg(fg));
     frame.render_widget(overlay, overlay_area);
 }
+
+/// Render the timer zone displaying active session countdown in HH:MM:SS format.
+/// Takes a significant portion of the layout (40% width) for visual prominence.
+pub fn render_timer_zone(frame: &mut Frame, area: Rect, app: &App) {
+    let timer_text = if let Some(session) = &app.active_session {
+        let elapsed = session.elapsed();
+        let hours = elapsed.num_seconds() / 3600;
+        let minutes = (elapsed.num_seconds() % 3600) / 60;
+        let seconds = elapsed.num_seconds() % 60;
+
+        format!("{:02}:{:02}:{:02}", hours, minutes, seconds)
+    } else {
+        "--:--:--".to_string()
+    };
+
+    let timer_widget = Paragraph::new(timer_text)
+        .block(
+            Block::default()
+                .title(" Timer ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan)),
+        )
+        .style(Style::default().add_modifier(Modifier::BOLD))
+        .alignment(Alignment::Center);
+
+    frame.render_widget(timer_widget, area);
+}
+
+/// Render the TODO list zone displaying all todos with visual distinction
+/// for active vs completed items.
+pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App) {
+    // If in TODO input mode, render input field instead
+    if app.todo_input_mode {
+        let input_display = format!("{}█", app.todo_input_buffer);
+        let input_widget = Paragraph::new(vec![
+            Line::from(Span::styled(
+                &input_display,
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(Span::styled(
+                "[Enter] save  [Esc] cancel",
+                Style::default().fg(Color::DarkGray),
+            )),
+        ])
+        .block(
+            Block::default()
+                .title(" Add TODO ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan)),
+        )
+        .wrap(Wrap { trim: true });
+
+        frame.render_widget(input_widget, area);
+        return;
+    }
+
+    if app.todos.is_empty() {
+        let empty_text = Paragraph::new("No TODOs. Press [a] to add one.")
+            .block(
+                Block::default()
+                    .title(" TODOs ")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Cyan)),
+            )
+            .style(Style::default().fg(Color::DarkGray))
+            .alignment(Alignment::Center);
+        frame.render_widget(empty_text, area);
+        return;
+    }
+
+    let todos_display: Vec<Line> = app
+        .todos
+        .iter()
+        .enumerate()
+        .map(|(idx, todo)| {
+            let is_selected = app.selected_todo_idx == Some(idx);
+            let status_icon = if todo.is_completed() { "✓" } else { "•" };
+
+            let (text_style, text) = if todo.is_completed() {
+                (
+                    Style::default()
+                        .fg(Color::DarkGray)
+                        .add_modifier(Modifier::DIM),
+                    format!("  {} {}", status_icon, todo.title),
+                )
+            } else {
+                (
+                    Style::default().fg(Color::White),
+                    format!("  {} {}", status_icon, todo.title),
+                )
+            };
+
+            if is_selected {
+                Line::from(vec![Span::styled(
+                    text,
+                    text_style.bg(Color::DarkGray).add_modifier(Modifier::BOLD),
+                )])
+            } else {
+                Line::from(Span::styled(text, text_style))
+            }
+        })
+        .collect();
+
+    let todo_widget = Paragraph::new(todos_display)
+        .block(
+            Block::default()
+                .title(" TODOs ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan)),
+        )
+        .wrap(Wrap { trim: true });
+
+    frame.render_widget(todo_widget, area);
+}
+
+/// Render the controls/help zone displaying available hotkeys.
+pub fn render_controls_zone(frame: &mut Frame, area: Rect, app: &App) {
+    let help_text = if app.todo_input_mode {
+        " [Enter] confirm  [Esc] cancel "
+    } else {
+        " [a] add  [d] delete  [c] complete  [s/→] start  [↑↓] navigate "
+    };
+
+    let controls_widget = Paragraph::new(help_text)
+        .block(Block::default().borders(Borders::TOP))
+        .style(Style::default().fg(Color::DarkGray))
+        .alignment(Alignment::Center);
+
+    frame.render_widget(controls_widget, area);
+}

@@ -1,0 +1,23 @@
+[
+  {
+    "id": 1,
+    "title": "Implement TODO CRUD",
+    "status": "active",
+    "created_at": 1712590000,
+    "completed_at": null
+  },
+  {
+    "id": 2,
+    "title": "Write tests for TODO persistence",
+    "status": "active",
+    "created_at": 1712590100,
+    "completed_at": null
+  },
+  {
+    "id": 3,
+    "title": "Review TODO feature spec",
+    "status": "completed",
+    "created_at": 1712589900,
+    "completed_at": 1712590500
+  }
+]

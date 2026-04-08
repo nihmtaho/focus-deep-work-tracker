@@ -193,7 +193,11 @@ pub fn handle_overlay_prompt(
                             ));
                         }
                         None => {
-                            session_store::insert_session(conn, &task, tag_opt.as_deref())?;
+                            // Get selected TODO ID if any
+                            let todo_id = app
+                                .selected_todo_idx
+                                .and_then(|idx| app.todos.get(idx).map(|t| t.id));
+                            session_store::insert_session_with_todo(conn, &task, tag_opt.as_deref(), todo_id)?;
                             app.message = Some(MessageOverlay::success(format!(
                                 "Session started: \"{task}\""
                             )));
@@ -234,6 +238,14 @@ pub fn handle_overlay_prompt(
                     } else {
                         Some(value.trim().to_string())
                     };
+                    // Get selected TODO ID if any, to link to the Pomodoro session
+                    let todo_id = app
+                        .selected_todo_idx
+                        .and_then(|idx| app.todos.get(idx).map(|t| t.id));
+
+                    // Create a database session record with optional TODO link
+                    session_store::insert_session_with_todo(conn, &task, tag_opt.as_deref(), todo_id)?;
+
                     let config =
                         PomodoroConfig::resolve(None, None, None, None).unwrap_or_default();
                     let timer = PomodoroTimer::new(task, tag_opt, config);
@@ -327,17 +339,27 @@ fn handle_overlay_mode_selector(
                 if app.active_session.is_some() {
                     app.message = Some(MessageOverlay::warning("Session already running."));
                 } else {
+                    // If TODO selected, use its title as default
+                    let default_task = app
+                        .selected_todo_idx
+                        .and_then(|idx| app.todos.get(idx).map(|t| t.title.clone()))
+                        .unwrap_or_default();
                     app.overlay = Overlay::Prompt {
                         label: "Session name:".to_string(),
-                        value: String::new(),
+                        value: default_task,
                         action: PromptAction::StartSession,
                     };
                 }
             } else {
                 // Pomodoro: gather task name
+                // If TODO selected, use its title as default
+                let default_task = app
+                    .selected_todo_idx
+                    .and_then(|idx| app.todos.get(idx).map(|t| t.title.clone()))
+                    .unwrap_or_default();
                 app.overlay = Overlay::Prompt {
                     label: "Pomodoro — task name:".to_string(),
-                    value: String::new(),
+                    value: default_task,
                     action: PromptAction::StartPomodoroName,
                 };
             }
@@ -384,7 +406,7 @@ pub fn handle_dashboard_tab(
     key: KeyEvent,
 ) -> Result<bool> {
     match key.code {
-        KeyCode::Char('s') | KeyCode::Char('S') | KeyCode::Enter => {
+        KeyCode::Char('e') | KeyCode::Char('E') | KeyCode::Enter if !app.todo_input_mode => {
             match session_store::stop_session(conn) {
                 Ok(session) => {
                     let elapsed = session
@@ -407,7 +429,7 @@ pub fn handle_dashboard_tab(
                 }
             }
         }
-        KeyCode::Char('n') | KeyCode::Char('N') => {
+        KeyCode::Char('n') | KeyCode::Char('N') if !app.todo_input_mode => {
             if app.active_session.is_some() {
                 app.message = Some(MessageOverlay::warning("Session already running."));
             } else if app.pomodoro_timer.is_some() {
@@ -418,7 +440,10 @@ pub fn handle_dashboard_tab(
                 app.overlay = Overlay::ModeSelector { cursor: 0 };
             }
         }
-        _ => {}
+        _ => {
+            // Delegate TODO-related keys to the TODO handler (includes ESC, input handling, etc.)
+            crate::tui::handlers_todo::handle_todo_key(app, conn, key.code)?;
+        }
     }
     Ok(false)
 }
@@ -760,7 +785,7 @@ mod tests {
         insert_active_session(&conn, "my task");
         let mut app = make_app();
         app.load_dashboard(&conn).unwrap();
-        handle_dashboard_tab(&mut app, &conn, make_key(KeyCode::Char('s'))).unwrap();
+        handle_dashboard_tab(&mut app, &conn, make_key(KeyCode::Char('e'))).unwrap();
         assert!(app.message.is_some());
         let msg = app.message.unwrap();
         assert_eq!(msg.kind, crate::tui::app::MessageKind::Success);
@@ -771,7 +796,7 @@ mod tests {
     fn dashboard_s_with_no_active_session_shows_error() {
         let (conn, _f) = test_conn();
         let mut app = make_app();
-        handle_dashboard_tab(&mut app, &conn, make_key(KeyCode::Char('s'))).unwrap();
+        handle_dashboard_tab(&mut app, &conn, make_key(KeyCode::Char('e'))).unwrap();
         let msg = app.message.unwrap();
         assert_eq!(msg.kind, crate::tui::app::MessageKind::Error);
         assert!(matches!(app.overlay, Overlay::None));
@@ -783,7 +808,7 @@ mod tests {
         insert_active_session(&conn, "task");
         let mut app = make_app();
         app.load_dashboard(&conn).unwrap();
-        handle_dashboard_tab(&mut app, &conn, make_key(KeyCode::Char('s'))).unwrap();
+        handle_dashboard_tab(&mut app, &conn, make_key(KeyCode::Char('e'))).unwrap();
         assert!(matches!(app.overlay, Overlay::None));
     }
 

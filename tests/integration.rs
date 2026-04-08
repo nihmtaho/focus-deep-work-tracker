@@ -7,4 +7,5 @@ mod integration {
     mod test_pomodoro_schema;
     mod test_report;
     mod test_start_stop;
+    mod todo_persistence;
 }

@@ -23,7 +23,10 @@
       "Bash(3h 42m 00s)",
       "Skill(commit-commands:commit-push-pr)",
       "Bash(.specify/scripts/bash/create-new-feature.sh:*)",
-      "Bash(cat /Users/nihmtaho/.claude/skills/*.md)"
+      "Bash(cat /Users/nihmtaho/.claude/skills/*.md)",
+      "Bash(gh run:*)",
+      "Bash(gh release:*)",
+      "Bash(mkdir:*)"
     ]
   },
   "enabledPlugins": {
