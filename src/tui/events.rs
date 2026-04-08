@@ -406,7 +406,7 @@ pub fn handle_dashboard_tab(
     key: KeyEvent,
 ) -> Result<bool> {
     match key.code {
-        KeyCode::Char('s') | KeyCode::Char('S') | KeyCode::Enter if !app.todo_input_mode => {
+        KeyCode::Char('e') | KeyCode::Char('E') | KeyCode::Enter if !app.todo_input_mode => {
             match session_store::stop_session(conn) {
                 Ok(session) => {
                     let elapsed = session
@@ -785,7 +785,7 @@ mod tests {
         insert_active_session(&conn, "my task");
         let mut app = make_app();
         app.load_dashboard(&conn).unwrap();
-        handle_dashboard_tab(&mut app, &conn, make_key(KeyCode::Char('s'))).unwrap();
+        handle_dashboard_tab(&mut app, &conn, make_key(KeyCode::Char('e'))).unwrap();
         assert!(app.message.is_some());
         let msg = app.message.unwrap();
         assert_eq!(msg.kind, crate::tui::app::MessageKind::Success);
@@ -796,7 +796,7 @@ mod tests {
     fn dashboard_s_with_no_active_session_shows_error() {
         let (conn, _f) = test_conn();
         let mut app = make_app();
-        handle_dashboard_tab(&mut app, &conn, make_key(KeyCode::Char('s'))).unwrap();
+        handle_dashboard_tab(&mut app, &conn, make_key(KeyCode::Char('e'))).unwrap();
         let msg = app.message.unwrap();
         assert_eq!(msg.kind, crate::tui::app::MessageKind::Error);
         assert!(matches!(app.overlay, Overlay::None));
@@ -808,7 +808,7 @@ mod tests {
         insert_active_session(&conn, "task");
         let mut app = make_app();
         app.load_dashboard(&conn).unwrap();
-        handle_dashboard_tab(&mut app, &conn, make_key(KeyCode::Char('s'))).unwrap();
+        handle_dashboard_tab(&mut app, &conn, make_key(KeyCode::Char('e'))).unwrap();
         assert!(matches!(app.overlay, Overlay::None));
     }
 
