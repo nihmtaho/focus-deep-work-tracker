@@ -53,7 +53,11 @@ pub fn update_status(conn: &Connection, id: u64, status: &str) -> Result<Todo> {
     }
 
     let now = Utc::now().timestamp();
-    let completed_at = if status == "completed" { Some(now) } else { None };
+    let completed_at = if status == "completed" {
+        Some(now)
+    } else {
+        None
+    };
 
     conn.execute(
         "UPDATE todos SET status = ?1, completed_at = ?2 WHERE id = ?3",
@@ -61,7 +65,8 @@ pub fn update_status(conn: &Connection, id: u64, status: &str) -> Result<Todo> {
     )?;
 
     // Fetch the updated todo
-    let mut stmt = conn.prepare("SELECT id, title, status, created_at, completed_at FROM todos WHERE id = ?1")?;
+    let mut stmt = conn
+        .prepare("SELECT id, title, status, created_at, completed_at FROM todos WHERE id = ?1")?;
     let todo = stmt.query_row(rusqlite::params![id as i64], |row| {
         Ok(Todo {
             id: row.get::<_, i64>(0)? as u64,
@@ -77,7 +82,10 @@ pub fn update_status(conn: &Connection, id: u64, status: &str) -> Result<Todo> {
 
 /// Delete a TODO by id.
 pub fn delete(conn: &Connection, id: u64) -> Result<()> {
-    conn.execute("DELETE FROM todos WHERE id = ?1", rusqlite::params![id as i64])?;
+    conn.execute(
+        "DELETE FROM todos WHERE id = ?1",
+        rusqlite::params![id as i64],
+    )?;
     Ok(())
 }
 

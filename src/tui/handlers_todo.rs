@@ -2,15 +2,11 @@
 use crossterm::event::KeyCode;
 use rusqlite::Connection;
 
-use crate::tui::app::App;
 use crate::models::todo;
+use crate::tui::app::App;
 
 /// Handle TODO-related keyboard input.
-pub fn handle_todo_key(
-    app: &mut App,
-    db: &Connection,
-    key: KeyCode,
-) -> anyhow::Result<()> {
+pub fn handle_todo_key(app: &mut App, db: &Connection, key: KeyCode) -> anyhow::Result<()> {
     match key {
         KeyCode::Char('a') if !app.todo_input_mode => {
             // Start adding TODO
@@ -47,9 +43,9 @@ pub fn handle_todo_key(
         }
         KeyCode::Char('s') if !app.todo_input_mode => {
             // Start session with selected TODO (or freeform if none selected)
-            let todo_id = app.selected_todo_idx.and_then(|idx| {
-                app.todos.get(idx).map(|t| t.id)
-            });
+            let todo_id = app
+                .selected_todo_idx
+                .and_then(|idx| app.todos.get(idx).map(|t| t.id));
 
             // Get task name: either from selected TODO or default to "Unnamed task"
             let task_name = if let Some(todo_id) = todo_id {

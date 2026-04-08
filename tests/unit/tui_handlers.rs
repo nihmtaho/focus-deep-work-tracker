@@ -1,9 +1,9 @@
 // TUI event handlers for TODO management - TDD first
 #[cfg(test)]
 mod tests {
-    use focus::tui::app::App;
     use focus::config::AppConfig;
     use focus::models::todo;
+    use focus::tui::app::App;
     use tempfile::NamedTempFile;
 
     fn setup_test_db() -> rusqlite::Connection {

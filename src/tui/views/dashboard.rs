@@ -19,9 +19,9 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
         .direction(Direction::Vertical)
         .margin(1)
         .constraints([
-            Constraint::Length(1), // controls/help
+            Constraint::Length(1),      // controls/help
             Constraint::Percentage(40), // timer + todo
-            Constraint::Min(5),    // today summary
+            Constraint::Min(5),         // today summary
         ])
         .split(area);
 

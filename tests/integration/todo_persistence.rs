@@ -44,11 +44,13 @@ mod tests {
         ).expect("Failed to insert session with todo_id");
 
         // Verify we can read it back
-        let count: i64 = db.query_row(
-            "SELECT COUNT(*) FROM sessions WHERE todo_id IS NOT NULL",
-            [],
-            |row| row.get(0),
-        ).expect("Failed to query");
+        let count: i64 = db
+            .query_row(
+                "SELECT COUNT(*) FROM sessions WHERE todo_id IS NOT NULL",
+                [],
+                |row| row.get(0),
+            )
+            .expect("Failed to query");
 
         assert_eq!(count, 1);
     }

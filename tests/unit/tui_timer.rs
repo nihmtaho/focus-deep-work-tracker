@@ -2,9 +2,9 @@
 #[cfg(test)]
 mod tests {
     use chrono::{Duration, Utc};
+    use focus::config::AppConfig;
     use focus::models::session::Session;
     use focus::tui::app::App;
-    use focus::config::AppConfig;
 
     fn create_test_app_with_session() -> (App, Session) {
         let config = AppConfig::default();

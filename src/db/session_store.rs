@@ -110,8 +110,9 @@ pub fn stop_session(conn: &Connection) -> Result<Session> {
         rusqlite::params![now, active.id],
     )?;
 
-    let mut stmt = conn
-        .prepare("SELECT id, task, tag, start_time, end_time, mode, todo_id FROM sessions WHERE id = ?1")?;
+    let mut stmt = conn.prepare(
+        "SELECT id, task, tag, start_time, end_time, mode, todo_id FROM sessions WHERE id = ?1",
+    )?;
     let (id, task, tag, start_epoch, end_epoch, mode, todo_id) =
         stmt.query_row(rusqlite::params![active.id], |row| {
             Ok((
@@ -125,7 +126,15 @@ pub fn stop_session(conn: &Connection) -> Result<Session> {
             ))
         })?;
 
-    Ok(row_to_session(id, task, tag, start_epoch, end_epoch, mode, todo_id))
+    Ok(row_to_session(
+        id,
+        task,
+        tag,
+        start_epoch,
+        end_epoch,
+        mode,
+        todo_id,
+    ))
 }
 
 pub fn list_sessions(conn: &Connection, limit: u32) -> Result<Vec<Session>> {
@@ -147,7 +156,15 @@ pub fn list_sessions(conn: &Connection, limit: u32) -> Result<Vec<Session>> {
     let mut sessions = Vec::new();
     for row in rows {
         let (id, task, tag, start_epoch, end_epoch, mode, todo_id) = row?;
-        sessions.push(row_to_session(id, task, tag, start_epoch, end_epoch, mode, todo_id));
+        sessions.push(row_to_session(
+            id,
+            task,
+            tag,
+            start_epoch,
+            end_epoch,
+            mode,
+            todo_id,
+        ));
     }
     Ok(sessions)
 }
@@ -224,7 +241,15 @@ pub fn list_all_completed(conn: &Connection) -> Result<Vec<Session>> {
     let mut sessions = Vec::new();
     for row in rows {
         let (id, task, tag, start_epoch, end_epoch, mode, todo_id) = row?;
-        sessions.push(row_to_session(id, task, tag, start_epoch, end_epoch, mode, todo_id));
+        sessions.push(row_to_session(
+            id,
+            task,
+            tag,
+            start_epoch,
+            end_epoch,
+            mode,
+            todo_id,
+        ));
     }
     Ok(sessions)
 }
@@ -250,7 +275,15 @@ pub fn list_completed_since(conn: &Connection, since: i64) -> Result<Vec<Session
     let mut sessions = Vec::new();
     for row in rows {
         let (id, task, tag, start_epoch, end_epoch, mode, todo_id) = row?;
-        sessions.push(row_to_session(id, task, tag, start_epoch, end_epoch, mode, todo_id));
+        sessions.push(row_to_session(
+            id,
+            task,
+            tag,
+            start_epoch,
+            end_epoch,
+            mode,
+            todo_id,
+        ));
     }
     Ok(sessions)
 }

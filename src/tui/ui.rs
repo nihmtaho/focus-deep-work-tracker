@@ -419,15 +419,16 @@ pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App) {
                     format!("  {} {}", status_icon, todo.title),
                 )
             } else {
-                (Style::default().fg(Color::White), format!("  {} {}", status_icon, todo.title))
+                (
+                    Style::default().fg(Color::White),
+                    format!("  {} {}", status_icon, todo.title),
+                )
             };
 
             if is_selected {
                 Line::from(vec![Span::styled(
                     text,
-                    text_style
-                        .bg(Color::DarkGray)
-                        .add_modifier(Modifier::BOLD),
+                    text_style.bg(Color::DarkGray).add_modifier(Modifier::BOLD),
                 )])
             } else {
                 Line::from(Span::styled(text, text_style))
