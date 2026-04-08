@@ -50,8 +50,22 @@ pub fn handle_todo_key(
             let todo_id = app.selected_todo_idx.and_then(|idx| {
                 app.todos.get(idx).map(|t| t.id)
             });
-            // TODO: Implement session start logic with optional todo_id
-            let _ = todo_id; // Suppress unused warning
+
+            // Get task name: either from selected TODO or default to "Unnamed task"
+            let task_name = if let Some(todo_id) = todo_id {
+                if let Some(todo) = app.todos.iter().find(|t| t.id == todo_id) {
+                    todo.title.clone()
+                } else {
+                    "Unnamed task".to_string()
+                }
+            } else {
+                "Unnamed task".to_string()
+            };
+
+            // Start session with optional TODO link
+            crate::db::session_store::insert_session_with_todo(db, &task_name, None, todo_id)?;
+            app.load_dashboard(db)?;
+            app.message = Some(crate::tui::app::MessageOverlay::success("Session started"));
         }
         KeyCode::Enter if app.todo_input_mode => {
             // Confirm TODO add

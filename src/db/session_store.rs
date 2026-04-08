@@ -30,10 +30,20 @@ fn row_to_session(
 }
 
 pub fn insert_session(conn: &Connection, task: &str, tag: Option<&str>) -> Result<()> {
+    insert_session_with_todo(conn, task, tag, None)
+}
+
+/// Insert a session with optional TODO link.
+pub fn insert_session_with_todo(
+    conn: &Connection,
+    task: &str,
+    tag: Option<&str>,
+    todo_id: Option<u64>,
+) -> Result<()> {
     let now = Utc::now().timestamp();
     conn.execute(
-        "INSERT INTO sessions (task, tag, start_time, mode) VALUES (?1, ?2, ?3, 'freeform')",
-        rusqlite::params![task, tag, now],
+        "INSERT INTO sessions (task, tag, start_time, mode, todo_id) VALUES (?1, ?2, ?3, 'freeform', ?4)",
+        rusqlite::params![task, tag, now, todo_id.map(|id| id as i64)],
     )?;
     Ok(())
 }
