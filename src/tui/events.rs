@@ -193,7 +193,11 @@ pub fn handle_overlay_prompt(
                             ));
                         }
                         None => {
-                            session_store::insert_session(conn, &task, tag_opt.as_deref())?;
+                            // Get selected TODO ID if any
+                            let todo_id = app
+                                .selected_todo_idx
+                                .and_then(|idx| app.todos.get(idx).map(|t| t.id));
+                            session_store::insert_session_with_todo(conn, &task, tag_opt.as_deref(), todo_id)?;
                             app.message = Some(MessageOverlay::success(format!(
                                 "Session started: \"{task}\""
                             )));
@@ -418,13 +422,8 @@ pub fn handle_dashboard_tab(
                 app.overlay = Overlay::ModeSelector { cursor: 0 };
             }
         }
-        KeyCode::Esc if app.todo_input_mode => {
-            // Cancel TODO input mode
-            app.todo_input_mode = false;
-            app.todo_input_buffer.clear();
-        }
         _ => {
-            // Delegate TODO-related keys to the TODO handler
+            // Delegate TODO-related keys to the TODO handler (includes ESC, input handling, etc.)
             crate::tui::handlers_todo::handle_todo_key(app, conn, key.code)?;
         }
     }

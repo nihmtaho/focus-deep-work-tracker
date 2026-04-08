@@ -42,26 +42,11 @@ pub fn handle_todo_key(app: &mut App, db: &Connection, key: KeyCode) -> anyhow::
             }
         }
         KeyCode::Char('s') if !app.todo_input_mode => {
-            // Start session with selected TODO (or freeform if none selected)
-            let todo_id = app
-                .selected_todo_idx
-                .and_then(|idx| app.todos.get(idx).map(|t| t.id));
-
-            // Get task name: either from selected TODO or default to "Unnamed task"
-            let task_name = if let Some(todo_id) = todo_id {
-                if let Some(todo) = app.todos.iter().find(|t| t.id == todo_id) {
-                    todo.title.clone()
-                } else {
-                    "Unnamed task".to_string()
-                }
-            } else {
-                "Unnamed task".to_string()
+            // Open mode selector to choose Freeform or Pomodoro
+            // The selected_todo_idx will be used when creating the session
+            app.overlay = crate::tui::app::Overlay::ModeSelector {
+                cursor: 0,
             };
-
-            // Start session with optional TODO link
-            crate::db::session_store::insert_session_with_todo(db, &task_name, None, todo_id)?;
-            app.load_dashboard(db)?;
-            app.message = Some(crate::tui::app::MessageOverlay::success("Session started"));
         }
         KeyCode::Enter if app.todo_input_mode => {
             // Confirm TODO add
