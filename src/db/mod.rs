@@ -45,7 +45,16 @@ pub fn open_db_at(db_path: &std::path::Path) -> Result<Connection> {
             break_minutes INTEGER NOT NULL DEFAULT 0
         );
         CREATE INDEX IF NOT EXISTS idx_pomodoro_stats_date
-            ON pomodoro_stats(date);",
+            ON pomodoro_stats(date);
+        CREATE TABLE IF NOT EXISTS todos (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            title         TEXT    NOT NULL,
+            status        TEXT    NOT NULL DEFAULT 'active',
+            created_at    INTEGER NOT NULL,
+            completed_at  INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_todos_status ON todos(status);
+        CREATE INDEX IF NOT EXISTS idx_todos_created_at ON todos(created_at DESC);",
     )
     .map_err(|_| FocusError::DataFileCorrupted {
         path: db_path.display().to_string(),
@@ -65,6 +74,26 @@ pub fn open_db_at(db_path: &std::path::Path) -> Result<Connection> {
     if !mode_col_exists {
         conn.execute_batch(
             "ALTER TABLE sessions ADD COLUMN mode TEXT NOT NULL DEFAULT 'freeform';",
+        )
+        .map_err(|_| FocusError::DataFileCorrupted {
+            path: db_path.display().to_string(),
+        })?;
+    }
+
+    // Idempotent migration: add todo_id column to sessions table (for TODO linking)
+    let todo_id_col_exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='todo_id'",
+            [],
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+
+    if !todo_id_col_exists {
+        conn.execute_batch(
+            "ALTER TABLE sessions ADD COLUMN todo_id INTEGER REFERENCES todos(id);
+            CREATE INDEX IF NOT EXISTS idx_sessions_todo_id ON sessions(todo_id);",
         )
         .map_err(|_| FocusError::DataFileCorrupted {
             path: db_path.display().to_string(),

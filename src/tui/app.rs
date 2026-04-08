@@ -2,6 +2,7 @@ use std::time::Instant;
 
 use crate::config::AppConfig;
 use crate::models::session::Session;
+use crate::models::todo::Todo;
 use crate::pomodoro::config::PomodoroConfig;
 use crate::pomodoro::timer::PomodoroTimer;
 
@@ -172,6 +173,11 @@ pub struct App {
     pub pomo_config: PomodoroConfig,
     /// Selected row index in the Settings tab (0=vim, 1=work, 2=break, 3=long_break, 4=long_break_after).
     pub settings_selected: usize,
+    // TODO fields for 007-ui-refresh feature
+    pub todos: Vec<Todo>,
+    pub selected_todo_idx: Option<usize>,
+    pub todo_input_mode: bool,
+    pub todo_input_buffer: String,
 }
 
 pub const LOG_PAGE_SIZE: usize = 10;
@@ -199,6 +205,10 @@ impl App {
             pomodoro_timer: None,
             pomo_config: PomodoroConfig::default(),
             settings_selected: 0,
+            todos: Vec::new(),
+            selected_todo_idx: None,
+            todo_input_mode: false,
+            todo_input_buffer: String::new(),
         }
     }
 
@@ -210,6 +220,14 @@ impl App {
         self.active_session = session_store::get_active_session(conn)?;
         self.today_summary = session_store::aggregate_by_tag(conn, today_start())?;
         self.today_sessions = session_store::list_completed_since(conn, today_start())?;
+        self.load_todos(conn)?;
+        Ok(())
+    }
+
+    /// Load TODOs from the database into the app state.
+    pub fn load_todos(&mut self, conn: &rusqlite::Connection) -> anyhow::Result<()> {
+        use crate::models::todo;
+        self.todos = todo::list_all(conn)?;
         Ok(())
     }
 
