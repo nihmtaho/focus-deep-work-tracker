@@ -418,7 +418,10 @@ pub fn handle_dashboard_tab(
                 app.overlay = Overlay::ModeSelector { cursor: 0 };
             }
         }
-        _ => {}
+        _ => {
+            // Delegate TODO-related keys to the TODO handler
+            crate::tui::handlers_todo::handle_todo_key(app, conn, key.code)?;
+        }
     }
     Ok(false)
 }
