@@ -407,7 +407,7 @@ pub fn handle_dashboard_tab(
                 }
             }
         }
-        KeyCode::Char('n') | KeyCode::Char('N') => {
+        KeyCode::Char('n') | KeyCode::Char('N') if !app.todo_input_mode => {
             if app.active_session.is_some() {
                 app.message = Some(MessageOverlay::warning("Session already running."));
             } else if app.pomodoro_timer.is_some() {
@@ -417,6 +417,11 @@ pub fn handle_dashboard_tab(
             } else {
                 app.overlay = Overlay::ModeSelector { cursor: 0 };
             }
+        }
+        KeyCode::Esc if app.todo_input_mode => {
+            // Cancel TODO input mode
+            app.todo_input_mode = false;
+            app.todo_input_buffer.clear();
         }
         _ => {
             // Delegate TODO-related keys to the TODO handler
