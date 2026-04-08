@@ -48,6 +48,13 @@ pub fn handle_todo_key(app: &mut App, db: &Connection, key: KeyCode) -> anyhow::
                 cursor: 0,
             };
         }
+        KeyCode::Right if !app.todo_input_mode && app.selected_todo_idx.is_some() => {
+            // Confirm TODO selection and open mode selector (alternative to 's' key)
+            // The selected_todo_idx will be used when creating the session
+            app.overlay = crate::tui::app::Overlay::ModeSelector {
+                cursor: 0,
+            };
+        }
         KeyCode::Enter if app.todo_input_mode => {
             // Confirm TODO add
             if !app.todo_input_buffer.is_empty() {

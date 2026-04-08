@@ -480,7 +480,7 @@ pub fn render_controls_zone(frame: &mut Frame, area: Rect, app: &App) {
     let help_text = if app.todo_input_mode {
         " [Enter] confirm  [Esc] cancel "
     } else {
-        " [a] add  [d] delete  [c] complete  [s] start  [↑↓] navigate "
+        " [a] add  [d] delete  [c] complete  [s/→] start  [↑↓] navigate "
     };
 
     let controls_widget = Paragraph::new(help_text)
