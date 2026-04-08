@@ -238,6 +238,14 @@ pub fn handle_overlay_prompt(
                     } else {
                         Some(value.trim().to_string())
                     };
+                    // Get selected TODO ID if any, to link to the Pomodoro session
+                    let todo_id = app
+                        .selected_todo_idx
+                        .and_then(|idx| app.todos.get(idx).map(|t| t.id));
+
+                    // Create a database session record with optional TODO link
+                    session_store::insert_session_with_todo(conn, &task, tag_opt.as_deref(), todo_id)?;
+
                     let config =
                         PomodoroConfig::resolve(None, None, None, None).unwrap_or_default();
                     let timer = PomodoroTimer::new(task, tag_opt, config);
@@ -331,17 +339,27 @@ fn handle_overlay_mode_selector(
                 if app.active_session.is_some() {
                     app.message = Some(MessageOverlay::warning("Session already running."));
                 } else {
+                    // If TODO selected, use its title as default
+                    let default_task = app
+                        .selected_todo_idx
+                        .and_then(|idx| app.todos.get(idx).map(|t| t.title.clone()))
+                        .unwrap_or_default();
                     app.overlay = Overlay::Prompt {
                         label: "Session name:".to_string(),
-                        value: String::new(),
+                        value: default_task,
                         action: PromptAction::StartSession,
                     };
                 }
             } else {
                 // Pomodoro: gather task name
+                // If TODO selected, use its title as default
+                let default_task = app
+                    .selected_todo_idx
+                    .and_then(|idx| app.todos.get(idx).map(|t| t.title.clone()))
+                    .unwrap_or_default();
                 app.overlay = Overlay::Prompt {
                     label: "Pomodoro — task name:".to_string(),
-                    value: String::new(),
+                    value: default_task,
                     action: PromptAction::StartPomodoroName,
                 };
             }
