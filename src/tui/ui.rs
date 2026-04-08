@@ -389,6 +389,33 @@ pub fn render_timer_zone(frame: &mut Frame, area: Rect, app: &App) {
 /// Render the TODO list zone displaying all todos with visual distinction
 /// for active vs completed items.
 pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App) {
+    // If in TODO input mode, render input field instead
+    if app.todo_input_mode {
+        let input_display = format!("{}█", app.todo_input_buffer);
+        let input_widget = Paragraph::new(vec![
+            Line::from(Span::styled(
+                &input_display,
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(Span::styled(
+                "[Enter] save  [Esc] cancel",
+                Style::default().fg(Color::DarkGray),
+            )),
+        ])
+        .block(
+            Block::default()
+                .title(" Add TODO ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan)),
+        )
+        .wrap(Wrap { trim: true });
+
+        frame.render_widget(input_widget, area);
+        return;
+    }
+
     if app.todos.is_empty() {
         let empty_text = Paragraph::new("No TODOs. Press [a] to add one.")
             .block(
