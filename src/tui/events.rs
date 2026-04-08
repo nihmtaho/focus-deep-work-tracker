@@ -384,7 +384,7 @@ pub fn handle_dashboard_tab(
     key: KeyEvent,
 ) -> Result<bool> {
     match key.code {
-        KeyCode::Char('s') | KeyCode::Char('S') | KeyCode::Enter => {
+        KeyCode::Char('s') | KeyCode::Char('S') | KeyCode::Enter if !app.todo_input_mode => {
             match session_store::stop_session(conn) {
                 Ok(session) => {
                     let elapsed = session
