@@ -3,4 +3,5 @@ mod unit {
     mod tui;
     mod todo;
     mod tui_timer;
+    mod tui_handlers;
 }

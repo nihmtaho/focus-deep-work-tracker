@@ -1,5 +1,6 @@
 pub mod app;
 pub mod events;
+pub mod handlers_todo;
 pub mod ui;
 pub mod views;
 
