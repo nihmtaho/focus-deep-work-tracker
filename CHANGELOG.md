@@ -2,15 +2,6 @@
 
 All notable changes to this project are documented here. Versions follow [Semantic Versioning](https://semver.org/).
 
-## [1.2.1] - April 07, 2026
-
-### Technical
-
-- **Release**: Implemented Git Flow release workflow with Conventional Commits validation
-- **Release**: Added GitHub Actions CI/CD: `ci.yml` runs clippy + tests on PR/push, `release.yml` builds cross-platform binaries (Linux/macOS/Windows) and publishes to GitHub Releases
-- **Release**: Makefile with `make setup` (install git hooks), `make test`, `make lint`, `make release VERSION=x.y.z`
-- **Developer**: Local commit-msg hook enforces Conventional Commits format (`feat:`, `fix:`, `docs:`, etc.)
-- **Developer**: `.gitignore` updated to exclude release artifacts and in-progress specs directories
 ## [Unreleased]
 
 ### Added
@@ -24,24 +15,22 @@ All notable changes to this project are documented here. Versions follow [Semant
 
 ---
 
-## [1.2.0] - April 7, 2026
+## [0.2.2] - April 08, 2026
 
 ### Added
 
-- **CLI**: New `focus start --pomodoro <TASK>` command to start 25/5/15 Pomodoro cycles with configurable durations
-- **CLI**: New `focus pomo-stats` command to view daily/weekly Pomodoro statistics, streaks, and abandonment counts
-- **TUI**: Dedicated Pomodoro view with live countdown, phase indicator (🍅 WORK / ☕ BREAK / 🌿 LONG BREAK)
-- **TUI**: Mode selector on start screen — choose between Pomodoro and Freeform sessions
-- **TUI**: Pomodoro customization dialog with inline validation for adjusting durations
-- **TUI**: New Settings tab to configure default Pomodoro durations globally
-- **TUI**: Pomodoro controls: [P] pause/resume, [S] skip break, [+5] extend phase, [Q] confirm quit
-- **Database**: `sessions.mode` column to distinguish Pomodoro from freeform sessions
-- **Database**: New `pomodoro_stats` table tracking daily completed/abandoned counts
-- **Configuration**: Support for `~/.config/focus/pomodoro.toml` with configurable durations
-- **Configuration**: Three-level precedence: config file → environment variables → CLI flags
-- **Notifications**: Desktop notifications on phase transitions
-- **Statistics**: Per-day streak tracking for Pomodoro sessions
-- **Integration**: Pomodoro work phases in `focus log` and `focus report` with mode labels
+- **Pomodoro Mode**: `focus start --pomodoro <TASK>` command to start 25/5/15 Pomodoro cycles with configurable durations
+- **Pomodoro Stats**: `focus pomo-stats` command to view daily/weekly statistics, streaks, and abandonment counts
+- **TUI Pomodoro**: Dedicated Pomodoro view with live countdown and phase indicator (🍅 WORK / ☕ BREAK / 🌿 LONG BREAK)
+- **Mode Selection**: TUI mode selector on start screen — choose between Pomodoro and Freeform sessions
+- **Customization**: Pomodoro customization dialog with inline validation for adjusting durations
+- **Settings Tab**: New Settings tab to configure default Pomodoro durations globally
+- **Pomodoro Controls**: [P] pause/resume, [S] skip break, [+5] extend phase, [Q] confirm quit
+- **Database Schema**: `sessions.mode` column and new `pomodoro_stats` table for tracking statistics
+- **Configuration File**: Support for `~/.config/focus/pomodoro.toml` with three-level precedence (file → env vars → CLI flags)
+- **Release Infrastructure**: Git Flow release workflow with Conventional Commits validation
+- **GitHub Actions**: CI/CD pipelines for testing and cross-platform binary builds (Linux/macOS/Windows)
+- **Developer Tools**: Makefile with `make setup`, `make test`, `make lint`, `make release VERSION=x.y.z`
 
 ### Changed
 
@@ -57,16 +46,17 @@ All notable changes to this project are documented here. Versions follow [Semant
 
 ### Technical
 
-- Added dependencies: `toml = "0.8"`, `ctrlc = "3"`
-- Database migrations applied automatically on first run
-- TUI redraws at 100ms intervals for smooth countdown
-- Timer state machine implemented with real time (not tick-based)
-- All 61 tests pass; TDD compliance for all user stories
-- Backward compatible: existing freeform sessions unchanged
+- **Pomodoro Implementation**: Real wall-clock timer with automatic database migrations
+- **Dependencies**: Added `toml = "0.8"`, `ctrlc = "3"` for configuration and signal handling
+- **UI Performance**: TUI redraws at 100ms intervals for smooth countdown display
+- **Test Coverage**: All 61 tests pass; TDD compliance for all user stories
+- **Release Automation**: Local `commit-msg` hook enforces Conventional Commits format
+- **Build Infrastructure**: GitHub Actions CI/CD with cross-platform binaries (Linux/macOS/Windows)
+- **Backward Compatibility**: Existing freeform sessions unchanged; Pomodoro is opt-in
 
 ---
 
-## [1.1.0] - April 6, 2026
+## [0.2.0] - April 6, 2026
 
 ### Added
 
@@ -85,7 +75,7 @@ All notable changes to this project are documented here. Versions follow [Semant
 
 ---
 
-## [1.0.0] - April 2, 2026
+## [0.1.0] - April 2, 2026
 
 ### Initial Release
 
