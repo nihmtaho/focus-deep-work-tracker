@@ -66,7 +66,11 @@ mod tests {
     #[test]
     fn save_and_load_roundtrip() {
         let f = NamedTempFile::new().unwrap();
-        let cfg = AppConfig { vim_mode: true };
+        let cfg = AppConfig {
+            vim_mode: true,
+            theme: None,
+            keyboard: KeyboardConfig::default(),
+        };
         save_config(f.path(), &cfg).unwrap();
         let loaded = load_config(f.path());
         assert!(loaded.vim_mode);
@@ -89,7 +93,11 @@ mod tests {
     #[test]
     fn save_config_writes_valid_json() {
         let f = NamedTempFile::new().unwrap();
-        let cfg = AppConfig { vim_mode: false };
+        let cfg = AppConfig {
+            vim_mode: false,
+            theme: None,
+            keyboard: KeyboardConfig::default(),
+        };
         save_config(f.path(), &cfg).unwrap();
         let raw = std::fs::read_to_string(f.path()).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&raw).unwrap();

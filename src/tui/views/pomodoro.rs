@@ -5,8 +5,10 @@ use ratatui::{
     widgets::{Block, Borders, Gauge, Paragraph},
     Frame,
 };
+use std::time::Duration;
 
 use crate::pomodoro::timer::{format_secs, PomodoroTimer};
+use crate::tui::timer_display::TimerDisplay;
 
 /// Render the full-screen Pomodoro timer view.
 pub fn render(frame: &mut Frame, timer: &PomodoroTimer, no_color: bool, area: Rect) {
@@ -48,8 +50,11 @@ pub fn render(frame: &mut Frame, timer: &PomodoroTimer, no_color: bool, area: Re
         .block(Block::default().borders(Borders::NONE));
     frame.render_widget(phase_widget, chunks[0]);
 
-    // MM:SS countdown (large)
-    let countdown = Paragraph::new(timer.format_remaining())
+    // HH:MM:SS countdown (large) using flip-clock format
+    let remaining_duration = Duration::from_secs(timer.remaining_secs);
+    let timer_display = TimerDisplay::new(remaining_duration);
+    let countdown_text = timer_display.render();
+    let countdown = Paragraph::new(countdown_text)
         .alignment(Alignment::Center)
         .style(
             Style::default()

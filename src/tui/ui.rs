@@ -5,9 +5,11 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Frame,
 };
+use std::time::Duration;
 
 use crate::tui::app::{App, MessageKind, Overlay, Tab};
 use crate::tui::views;
+use crate::tui::timer_display::TimerDisplay;
 
 const HELP_TEXT: &str = "\
 Global
@@ -360,15 +362,14 @@ fn render_message_overlay(
 }
 
 /// Render the timer zone displaying active session countdown in HH:MM:SS format.
+/// Uses TimerDisplay component for consistent flip-clock formatting.
 /// Takes a significant portion of the layout (40% width) for visual prominence.
 pub fn render_timer_zone(frame: &mut Frame, area: Rect, app: &App) {
     let timer_text = if let Some(session) = &app.active_session {
         let elapsed = session.elapsed();
-        let hours = elapsed.num_seconds() / 3600;
-        let minutes = (elapsed.num_seconds() % 3600) / 60;
-        let seconds = elapsed.num_seconds() % 60;
-
-        format!("{:02}:{:02}:{:02}", hours, minutes, seconds)
+        let duration = Duration::from_secs(elapsed.num_seconds() as u64);
+        let timer = TimerDisplay::new(duration);
+        timer.render()
     } else {
         "--:--:--".to_string()
     };
