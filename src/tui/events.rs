@@ -36,6 +36,11 @@ pub fn handle_key_event(app: &mut App, conn: &rusqlite::Connection, key: KeyEven
             return Ok(false);
         }
         KeyCode::Esc => {
+            // If in TODO input mode on Dashboard, let the TODO handler process ESC to cancel input
+            if app.active_tab == Tab::Dashboard && app.todo_input_mode {
+                return handle_dashboard_tab(app, conn, key);
+            }
+            // Otherwise, clear message overlay
             app.message = None;
             return Ok(false);
         }
