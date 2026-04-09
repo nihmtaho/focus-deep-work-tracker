@@ -28,14 +28,20 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
     // Render controls zone at top
     crate::tui::ui::render_controls_zone(frame, chunks[0], app);
 
-    // Split middle section into timer (40%) and TODO list (60%)
+    // Split middle section into panel (40%) and TODO list (60%)
     let middle_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
         .split(chunks[1]);
 
-    // Render timer zone (left/center)
-    crate::tui::ui::render_timer_zone(frame, middle_chunks[0], app);
+    // Render left panel: Pomodoro panel when idle, Timer zone when active session
+    if app.active_session.is_some() {
+        // Show Timer zone during active session (freeform or pomodoro)
+        crate::tui::ui::render_timer_zone(frame, middle_chunks[0], app);
+    } else {
+        // Show Pomodoro panel when idle (no active session)
+        crate::tui::ui::render_pomodoro_panel(frame, middle_chunks[0], app);
+    }
 
     // Render TODO zone (right)
     crate::tui::ui::render_todo_zone(frame, middle_chunks[1], app);

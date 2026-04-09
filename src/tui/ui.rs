@@ -10,6 +10,7 @@ use std::time::Duration;
 use crate::tui::app::{App, MessageKind, Overlay, Tab};
 use crate::tui::views;
 use crate::tui::timer_display::TimerDisplay;
+use crate::pomodoro::stats::PomodoroPanelState;
 
 const HELP_TEXT: &str = "\
 Global
@@ -359,6 +360,64 @@ fn render_message_overlay(
         )
         .style(Style::default().fg(fg));
     frame.render_widget(overlay, overlay_area);
+}
+
+/// Render the Pomodoro panel when idle, showing historical stats and start button.
+/// Displays total cycles, cumulative duration, focus streak, and last completion time.
+pub fn render_pomodoro_panel(frame: &mut Frame, area: Rect, _app: &App) {
+    // For now, create an idle panel state as placeholder
+    // TODO: Load actual stats from database in Phase 6 (T060-T061)
+    let panel_state = PomodoroPanelState::idle();
+
+    let content = if panel_state.has_activity() {
+        // Show stats when there's activity today
+        vec![
+            Line::from(Span::styled(
+                format!("{} pomodoros today", panel_state.total_cycles_today),
+                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            )),
+            Line::from(Span::raw("")),
+            Line::from(Span::styled(
+                format!("Duration: {}", panel_state.format_duration()),
+                Style::default().fg(Color::White),
+            )),
+            Line::from(Span::raw("")),
+            Line::from(Span::styled(
+                format!("Streak: {} days", panel_state.focus_streak_days),
+                Style::default().fg(Color::Green),
+            )),
+            Line::from(Span::raw("")),
+            Line::from(Span::styled(
+                "[N] Start Pomodoro",
+                Style::default().fg(Color::Yellow),
+            )),
+        ]
+    } else {
+        // Show start prompt when idle
+        vec![
+            Line::from(Span::styled(
+                "No Pomodoro sessions yet.",
+                Style::default().fg(Color::DarkGray),
+            )),
+            Line::from(Span::raw("")),
+            Line::from(Span::styled(
+                "Press [N] on Dashboard to start a Pomodoro session.",
+                Style::default().fg(Color::DarkGray),
+            )),
+        ]
+    };
+
+    let widget = Paragraph::new(content)
+        .block(
+            Block::default()
+                .title(" Pomodoro ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan)),
+        )
+        .alignment(Alignment::Center)
+        .wrap(Wrap { trim: true });
+
+    frame.render_widget(widget, area);
 }
 
 /// Render the timer zone displaying active session countdown in HH:MM:SS format.
