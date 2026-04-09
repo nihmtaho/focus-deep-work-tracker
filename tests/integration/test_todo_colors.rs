@@ -76,6 +76,81 @@ fn test_todo_context_switch_from_input_to_viewing() {
 }
 
 #[test]
+fn test_todo_color_rendering_with_theme_colors() {
+    use focus::models::todo::Todo;
+    use focus::theme::Theme;
+
+    // Create test TODOs with different statuses
+    let active_todo = Todo {
+        id: 1,
+        title: "Active TODO".to_string(),
+        status: "active".to_string(),
+        created_at: 0,
+        completed_at: None,
+    };
+
+    let completed_todo = Todo {
+        id: 2,
+        title: "Completed TODO".to_string(),
+        status: "completed".to_string(),
+        created_at: 0,
+        completed_at: Some(100),
+    };
+
+    // Test with each theme
+    for theme in &[
+        Theme::OneDark,
+        Theme::Material,
+        Theme::Light,
+        Theme::Dark,
+    ] {
+        let colors = theme.colors();
+
+        // Verify active TODO uses todo_todo color
+        let active_color = active_todo.get_color(&colors);
+        assert_eq!(active_color, colors.todo_todo);
+
+        // Verify completed TODO uses todo_completed color
+        let completed_color = completed_todo.get_color(&colors);
+        assert_eq!(completed_color, colors.todo_completed);
+    }
+}
+
+#[test]
+fn test_todo_color_updates_on_state_transition() {
+    use focus::models::todo::Todo;
+    use focus::theme::Theme;
+
+    let colors = Theme::OneDark.colors();
+
+    // Start with active TODO
+    let mut todo = Todo {
+        id: 1,
+        title: "Test TODO".to_string(),
+        status: "active".to_string(),
+        created_at: 0,
+        completed_at: None,
+    };
+
+    let active_color = todo.get_color(&colors);
+    assert_eq!(active_color, colors.todo_todo);
+
+    // Transition to completed
+    todo.status = "completed".to_string();
+    todo.completed_at = Some(100);
+
+    let completed_color = todo.get_color(&colors);
+    assert_eq!(completed_color, colors.todo_completed);
+
+    // Verify colors are different (unless theme defines same color for both)
+    // This ensures the color system is actually responsive to state changes
+    assert_ne!(
+        colors.todo_todo, colors.todo_completed,
+        "Theme should define different colors for active and completed TODOs"
+    );
+}
+
+#[test]
 fn test_todo_color_system_placeholder() {
     // TODO colors placeholder - will be implemented in Phase 5
     assert!(true);

@@ -388,7 +388,7 @@ pub fn render_timer_zone(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 /// Render the TODO list zone displaying all todos with visual distinction
-/// for active vs completed items.
+/// for active vs completed items, using theme colors for each state.
 pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App) {
     // If in TODO input mode, render input field instead
     if app.todo_input_mode {
@@ -431,6 +431,10 @@ pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App) {
         return;
     }
 
+    // Get current theme colors for TODO rendering
+    let theme = crate::theme::Theme::auto_detect();
+    let theme_colors = theme.colors();
+
     let todos_display: Vec<Line> = app
         .todos
         .iter()
@@ -438,19 +442,21 @@ pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App) {
         .map(|(idx, todo)| {
             let is_selected = app.selected_todo_idx == Some(idx);
             let status_icon = if todo.is_completed() { "✓" } else { "•" };
+            let text = format!("  {} {}", status_icon, todo.title);
 
-            let (text_style, text) = if todo.is_completed() {
-                (
-                    Style::default()
-                        .fg(Color::DarkGray)
-                        .add_modifier(Modifier::DIM),
-                    format!("  {} {}", status_icon, todo.title),
-                )
+            // Apply state-based color from theme
+            let todo_color = todo.get_color(&theme_colors);
+            let base_style = if app.no_color {
+                Style::default()
             } else {
-                (
-                    Style::default().fg(Color::White),
-                    format!("  {} {}", status_icon, todo.title),
-                )
+                Style::default().fg(todo_color)
+            };
+
+            // Add dimming for completed items
+            let text_style = if todo.is_completed() {
+                base_style.add_modifier(Modifier::DIM)
+            } else {
+                base_style
             };
 
             if is_selected {
