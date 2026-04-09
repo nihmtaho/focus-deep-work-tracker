@@ -67,6 +67,30 @@ pub fn handle_key_event(app: &mut App, conn: &rusqlite::Connection, key: KeyEven
             app.active_tab = Tab::Pomodoro;
             return Ok(false);
         }
+        // Letter-based tab shortcuts (disabled during TODO input mode)
+        KeyCode::Char('d') | KeyCode::Char('D') if !app.todo_input_mode => {
+            app.active_tab = Tab::Dashboard;
+            return Ok(false);
+        }
+        KeyCode::Char('l') | KeyCode::Char('L') if !app.todo_input_mode => {
+            app.active_tab = Tab::Log;
+            app.load_log(conn)?;
+            return Ok(false);
+        }
+        KeyCode::Char('r') | KeyCode::Char('R') if !app.todo_input_mode => {
+            app.active_tab = Tab::Report;
+            let window = app.report_window.clone();
+            app.load_report(conn, &window)?;
+            return Ok(false);
+        }
+        KeyCode::Char('s') | KeyCode::Char('S') if !app.todo_input_mode => {
+            app.active_tab = Tab::Settings;
+            return Ok(false);
+        }
+        KeyCode::Char('p') | KeyCode::Char('P') if !app.todo_input_mode => {
+            app.active_tab = Tab::Pomodoro;
+            return Ok(false);
+        }
         KeyCode::Tab => {
             app.active_tab = match app.active_tab {
                 Tab::Dashboard => Tab::Log,
