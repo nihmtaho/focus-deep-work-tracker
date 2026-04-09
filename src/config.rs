@@ -6,6 +6,22 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
     pub vim_mode: bool,
+    #[serde(default)]
+    pub theme: Option<String>,
+    #[serde(default)]
+    pub keyboard: KeyboardConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct KeyboardConfig {
+    #[serde(default = "default_true")]
+    pub enable_number_shortcuts: bool,
+    #[serde(default = "default_true")]
+    pub enable_letter_shortcuts: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// Returns the path to the config file: `{config_dir}/focus/config.json`

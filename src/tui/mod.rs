@@ -3,6 +3,10 @@ pub mod events;
 pub mod handlers_todo;
 pub mod ui;
 pub mod views;
+pub mod timer_display;
+pub mod keyboard;
+pub mod themes;
+pub mod report;
 
 use std::io::{self, IsTerminal};
 use std::sync::atomic::{AtomicBool, Ordering};
