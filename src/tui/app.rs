@@ -5,6 +5,7 @@ use crate::models::session::Session;
 use crate::models::todo::Todo;
 use crate::pomodoro::config::PomodoroConfig;
 use crate::pomodoro::timer::PomodoroTimer;
+use crate::tui::keyboard::{KeyHandler, KeyContext};
 
 // ── Time window ────────────────────────────────────────────────────────────────
 
@@ -178,12 +179,15 @@ pub struct App {
     pub selected_todo_idx: Option<usize>,
     pub todo_input_mode: bool,
     pub todo_input_buffer: String,
+    // Keyboard handler for context-aware input routing
+    pub keyboard_handler: KeyHandler,
 }
 
 pub const LOG_PAGE_SIZE: usize = 10;
 
 impl App {
     pub fn new(no_color: bool, config: AppConfig) -> Self {
+        let vim_mode = config.vim_mode;
         Self {
             active_tab: Tab::Dashboard,
             overlay: Overlay::None,
@@ -209,6 +213,7 @@ impl App {
             selected_todo_idx: None,
             todo_input_mode: false,
             todo_input_buffer: String::new(),
+            keyboard_handler: KeyHandler::new(vim_mode),
         }
     }
 
@@ -307,6 +312,20 @@ impl App {
     pub fn count_completed(conn: &rusqlite::Connection) -> anyhow::Result<usize> {
         use crate::db::session_store;
         session_store::count_completed(conn)
+    }
+
+    /// Enter TODO input mode: set keyboard context to Input and clear buffer for new entry
+    pub fn enter_todo_input_mode(&mut self) {
+        self.todo_input_mode = true;
+        self.todo_input_buffer.clear();
+        self.keyboard_handler.set_context(KeyContext::Input);
+    }
+
+    /// Exit TODO input mode: set keyboard context to Viewing and clear buffer
+    pub fn exit_todo_input_mode(&mut self) {
+        self.todo_input_mode = false;
+        self.todo_input_buffer.clear();
+        self.keyboard_handler.set_context(KeyContext::Viewing);
     }
 }
 

@@ -9,9 +9,8 @@ use crate::tui::app::App;
 pub fn handle_todo_key(app: &mut App, db: &Connection, key: KeyCode) -> anyhow::Result<()> {
     match key {
         KeyCode::Char('a') if !app.todo_input_mode => {
-            // Start adding TODO
-            app.todo_input_mode = true;
-            app.todo_input_buffer.clear();
+            // Start adding TODO (automatically sets KeyContext::Input)
+            app.enter_todo_input_mode();
         }
         KeyCode::Char('d') if !app.todo_input_mode && app.selected_todo_idx.is_some() => {
             // Delete selected TODO
@@ -56,17 +55,16 @@ pub fn handle_todo_key(app: &mut App, db: &Connection, key: KeyCode) -> anyhow::
             };
         }
         KeyCode::Enter if app.todo_input_mode => {
-            // Confirm TODO add
+            // Confirm TODO add (automatically sets KeyContext::Viewing)
             if !app.todo_input_buffer.is_empty() {
                 todo::insert(db, &app.todo_input_buffer)?;
-                app.todo_input_buffer.clear();
-                app.todo_input_mode = false;
+                app.exit_todo_input_mode();
                 app.load_todos(db)?;
             }
         }
         KeyCode::Esc => {
-            app.todo_input_mode = false;
-            app.todo_input_buffer.clear();
+            // Cancel TODO input and return to viewing mode (automatically sets KeyContext::Viewing)
+            app.exit_todo_input_mode();
         }
         KeyCode::Up if !app.todo_input_mode && !app.todos.is_empty() => {
             // Navigate up in TODO list

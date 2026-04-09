@@ -201,4 +201,70 @@ mod tests {
         assert_eq!(handler.handle_key(create_key_event(KeyCode::Up)), KeyAction::FocusUp);
         assert_eq!(handler.handle_key(create_key_event(KeyCode::Down)), KeyAction::FocusDown);
     }
+
+    #[test]
+    fn test_esc_key_in_input_context_returns_cancel_input() {
+        let mut handler = KeyHandler::new(false);
+        handler.set_context(KeyContext::Input);
+        let event = create_key_event(KeyCode::Esc);
+        assert_eq!(handler.handle_key(event), KeyAction::CancelInput);
+    }
+
+    #[test]
+    fn test_navigation_shortcuts_disabled_in_input_context() {
+        let mut handler = KeyHandler::new(false);
+        handler.set_context(KeyContext::Input);
+
+        // Test letter shortcuts disabled
+        let d_event = create_key_event(KeyCode::Char('d'));
+        match handler.handle_key(d_event) {
+            KeyAction::InputKeypress(_) => {},
+            _ => panic!("Expected InputKeypress for 'd' in input mode"),
+        }
+
+        // Test number shortcuts disabled
+        let one_event = create_key_event(KeyCode::Char('1'));
+        match handler.handle_key(one_event) {
+            KeyAction::InputKeypress(_) => {},
+            _ => panic!("Expected InputKeypress for '1' in input mode"),
+        }
+
+        // Test arrow keys disabled
+        let up_event = create_key_event(KeyCode::Up);
+        match handler.handle_key(up_event) {
+            KeyAction::InputKeypress(_) => {},
+            _ => panic!("Expected InputKeypress for Up in input mode"),
+        }
+    }
+
+    #[test]
+    fn test_all_shortcuts_return_input_keypress_in_input_context() {
+        let mut handler = KeyHandler::new(true); // vim mode enabled
+        handler.set_context(KeyContext::Input);
+
+        // All keys except Esc should return InputKeypress
+        let test_keys = vec![
+            KeyCode::Char('d'),
+            KeyCode::Char('s'),
+            KeyCode::Char('t'),
+            KeyCode::Char('1'),
+            KeyCode::Char('h'),
+            KeyCode::Char('j'),
+            KeyCode::Char('k'),
+            KeyCode::Char('l'),
+            KeyCode::Left,
+            KeyCode::Right,
+            KeyCode::Up,
+            KeyCode::Down,
+        ];
+
+        for key_code in test_keys {
+            let event = create_key_event(key_code);
+            assert!(
+                matches!(handler.handle_key(event), KeyAction::InputKeypress(_)),
+                "Key {:?} should return InputKeypress in input context",
+                key_code
+            );
+        }
+    }
 }
