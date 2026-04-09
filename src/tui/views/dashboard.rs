@@ -1,99 +1,54 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    style::{Color, Style},
+    widgets::{Block, Borders, Paragraph},
     Frame,
 };
 
-use crate::display::format::format_duration;
 use crate::tui::app::{App, MessageKind, MessageOverlay};
 
 pub fn render(frame: &mut Frame, app: &App, area: Rect) {
-    // Three-zone layout for 007-ui-refresh:
+    // Three-zone layout for 008-dashboard-ui-enhancements:
     // Top: Controls zone (hotkey legend)
-    // Middle: Timer zone (40%) + TODO zone (60%)
-    // Bottom: Today's summary
+    // Middle: Panel zone (40% timer/pomodoro + 30% TODO + 30% Report)
+    // Uses flexible layout to accommodate report analytics
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(1)
         .constraints([
             Constraint::Length(1),      // controls/help
-            Constraint::Percentage(40), // timer + todo
-            Constraint::Min(5),         // today summary
+            Constraint::Min(10),        // main panel area (timer + todo + report)
         ])
         .split(area);
 
     // Render controls zone at top
     crate::tui::ui::render_controls_zone(frame, chunks[0], app);
 
-    // Split middle section into panel (40%) and TODO list (60%)
-    let middle_chunks = Layout::default()
+    // Split main panel into three sections: left (40% timer/pomodoro), middle (30% TODO), right (30% Report)
+    let main_chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+        .constraints([
+            Constraint::Percentage(40), // Timer/Pomodoro panel
+            Constraint::Percentage(30), // TODO list
+            Constraint::Percentage(30), // Report panel
+        ])
         .split(chunks[1]);
 
     // Render left panel: Pomodoro panel when idle, Timer zone when active session
     if app.active_session.is_some() {
         // Show Timer zone during active session (freeform or pomodoro)
-        crate::tui::ui::render_timer_zone(frame, middle_chunks[0], app);
+        crate::tui::ui::render_timer_zone(frame, main_chunks[0], app);
     } else {
         // Show Pomodoro panel when idle (no active session)
-        crate::tui::ui::render_pomodoro_panel(frame, middle_chunks[0], app);
+        crate::tui::ui::render_pomodoro_panel(frame, main_chunks[0], app);
     }
 
-    // Render TODO zone (right)
-    crate::tui::ui::render_todo_zone(frame, middle_chunks[1], app);
+    // Render TODO zone (middle)
+    crate::tui::ui::render_todo_zone(frame, main_chunks[1], app);
 
-    // Render today's summary (bottom)
-    let summary_lines: Vec<Line> = if app.today_sessions.is_empty() {
-        vec![Line::from(Span::styled(
-            "  No sessions today.",
-            Style::default().fg(Color::DarkGray),
-        ))]
-    } else {
-        let mut lines = Vec::new();
-        let mut total_secs: i64 = 0;
-        for session in &app.today_sessions {
-            let secs = session.duration().map(|d| d.num_seconds()).unwrap_or(0);
-            total_secs += secs;
-            let dur = format_duration(chrono::Duration::seconds(secs));
-            let tag_suffix = session
-                .tag
-                .as_deref()
-                .map(|t| format!(" [{}]", t))
-                .unwrap_or_default();
-            let label = format!("  {}{}", session.task, tag_suffix);
-            lines.push(Line::from(vec![
-                Span::styled(format!("{:<30}", label), Style::default().fg(Color::Cyan)),
-                Span::raw(dur),
-            ]));
-        }
-        lines.push(Line::from(vec![
-            Span::styled(
-                format!("  {:<30}", "TOTAL"),
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                format_duration(chrono::Duration::seconds(total_secs)),
-                Style::default().add_modifier(Modifier::BOLD),
-            ),
-        ]));
-        lines
-    };
-
-    let summary_block = Paragraph::new(summary_lines)
-        .block(
-            Block::default()
-                .title(" Today's Summary ")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Blue)),
-        )
-        .wrap(Wrap { trim: true });
-    frame.render_widget(summary_block, chunks[2]);
+    // Render Report panel (right) - replaces Today's Summary
+    crate::tui::ui::render_report_panel(frame, main_chunks[2], app);
 
     // Message overlay
     if let Some(msg) = &app.message {

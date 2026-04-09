@@ -10,6 +10,7 @@ use std::time::Duration;
 use crate::tui::app::{App, MessageKind, Overlay, Tab};
 use crate::tui::views;
 use crate::tui::timer_display::TimerDisplay;
+use crate::tui::report::ReportMetrics;
 use crate::pomodoro::stats::PomodoroPanelState;
 
 const HELP_TEXT: &str = "\
@@ -415,6 +416,62 @@ pub fn render_pomodoro_panel(frame: &mut Frame, area: Rect, _app: &App) {
                 .border_style(Style::default().fg(Color::Cyan)),
         )
         .alignment(Alignment::Center)
+        .wrap(Wrap { trim: true });
+
+    frame.render_widget(widget, area);
+}
+
+/// Render the Report panel showing session analytics and productivity metrics.
+/// Displays: session counts, total duration, completion rate, focus streak, and productivity score.
+pub fn render_report_panel(frame: &mut Frame, area: Rect, _app: &App) {
+    // TODO: Load actual metrics from database (Phase 9 T095-T099)
+    // For now, create placeholder metrics
+    let metrics = ReportMetrics::default();
+
+    let content = vec![
+        Line::from(Span::styled(
+            "Today's Report",
+            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::raw("")),
+        Line::from(vec![
+            Span::styled(
+                format!("Sessions: {}", metrics.count_today),
+                Style::default().fg(Color::White),
+            ),
+            Span::raw(format!("  Duration: {}", metrics.format_duration_today())),
+        ]),
+        Line::from(Span::raw("")),
+        Line::from(vec![
+            Span::styled(
+                format!("Completion: {}%", metrics.completion_rate),
+                Style::default().fg(Color::Green),
+            ),
+            Span::raw(format!("  Streak: {} days", metrics.focus_streak_days)),
+        ]),
+        Line::from(Span::raw("")),
+        Line::from(Span::styled(
+            format!("Productivity: {}/100", metrics.compute_productivity_score()),
+            Style::default().fg(Color::Yellow),
+        )),
+        Line::from(Span::raw("")),
+        Line::from(Span::styled(
+            format!("Week: {} sessions • {}", metrics.count_week, metrics.format_duration_week()),
+            Style::default().fg(Color::DarkGray),
+        )),
+        Line::from(Span::styled(
+            format!("All-time: {} sessions", metrics.count_all_time),
+            Style::default().fg(Color::DarkGray),
+        )),
+    ];
+
+    let widget = Paragraph::new(content)
+        .block(
+            Block::default()
+                .title(" Report ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan)),
+        )
         .wrap(Wrap { trim: true });
 
     frame.render_widget(widget, area);
