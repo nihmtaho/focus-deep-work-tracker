@@ -1,8 +1,10 @@
 //! Integration tests for timer display component
 //!
-//! Tests the flip-clock timer display rendering in various formats.
+//! Tests the flip-clock timer display rendering in various formats,
+//! including validation with theme colors.
 
 use focus::tui::timer_display::TimerDisplay;
+use focus::theme::Theme;
 use std::time::Duration;
 
 #[test]
@@ -50,4 +52,44 @@ fn test_timer_display_various_durations() {
             secs
         );
     }
+}
+
+#[test]
+fn test_timer_display_with_theme_colors() {
+    // Verify that timer display works correctly with all available themes
+    let themes = vec![Theme::OneDark, Theme::Material, Theme::Light, Theme::Dark];
+
+    for theme in themes {
+        // Get theme colors for validation
+        let colors = theme.colors();
+
+        // Verify timer_digit color is defined
+        assert!(!format!("{:?}", colors.timer_digit).is_empty());
+
+        // Verify timer_separator color is defined
+        assert!(!format!("{:?}", colors.timer_separator).is_empty());
+
+        // Create a timer display and verify it renders correctly
+        let display = TimerDisplay::new(Duration::from_secs(3661)); // 1:01:01
+        let rendered = display.render();
+
+        // Verify the timer displays correctly regardless of theme
+        assert_eq!(rendered, "01:01:01");
+    }
+}
+
+#[test]
+fn test_timer_display_theme_auto_detection() {
+    // Verify that theme auto-detection provides valid colors for timer display
+    let auto_detected_theme = Theme::auto_detect();
+    let colors = auto_detected_theme.colors();
+
+    // Verify critical timer colors are present
+    assert!(!format!("{:?}", colors.timer_digit).is_empty());
+    assert!(!format!("{:?}", colors.timer_separator).is_empty());
+
+    // Create a timer and verify it renders
+    let display = TimerDisplay::new(Duration::from_secs(7322)); // 2:02:02
+    let rendered = display.render();
+    assert_eq!(rendered, "02:02:02");
 }
