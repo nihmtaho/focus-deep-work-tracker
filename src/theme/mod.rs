@@ -60,7 +60,7 @@ impl Theme {
                 }
             }
             // Default to dark on Linux
-            return Theme::Dark;
+            Theme::Dark
         }
 
         #[cfg(not(any(target_os = "macos", target_os = "linux")))]
