@@ -541,7 +541,6 @@ pub fn render_timer_zone(frame: &mut Frame, area: Rect, app: &App, focused: bool
 /// Render the TODO list zone displaying all todos with visual distinction
 /// for active vs completed items, using theme colors for each state.
 pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App, focused: bool) {
-    // If in TODO input mode, render input field instead
     let border_style = if focused {
         Style::default()
             .fg(Color::Yellow)
@@ -549,65 +548,6 @@ pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App, focused: bool)
     } else {
         Style::default().fg(Color::Cyan)
     };
-
-    if app.todo_input_mode {
-        // Build cursor-split display: text before cursor | cursor char | text after cursor
-        let ti = &app.todo_input;
-        let (before, cursor_char, after) = ti.cursor_spans();
-
-        let (mode_label, title, cursor_style) = if app.config.vim_mode {
-            match ti.vim_mode {
-                crate::tui::app::VimInputMode::Insert => (
-                    ti.mode_label(),
-                    " Add TODO [INSERT] ",
-                    Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD),
-                ),
-                crate::tui::app::VimInputMode::Normal => (
-                    ti.mode_label(),
-                    " Add TODO [NORMAL] ",
-                    Style::default().fg(Color::Black).bg(Color::Yellow).add_modifier(Modifier::BOLD),
-                ),
-            }
-        } else {
-            (
-                "",
-                " Add TODO ",
-                Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD),
-            )
-        };
-
-        let hint = ti.hint();
-
-        let mut content_lines = vec![
-            Line::from(vec![
-                Span::styled(before, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                Span::styled(&cursor_char, cursor_style),
-                Span::styled(after, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-            ]),
-        ];
-        if app.config.vim_mode {
-            content_lines.push(Line::from(Span::styled(
-                mode_label,
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
-            )));
-        }
-        content_lines.push(Line::from(Span::styled(
-            hint,
-            Style::default().fg(Color::DarkGray),
-        )));
-
-        let input_widget = Paragraph::new(content_lines)
-            .block(
-                Block::default()
-                    .title(title)
-                    .borders(Borders::ALL)
-                    .border_style(border_style),
-            )
-            .wrap(Wrap { trim: true });
-
-        frame.render_widget(input_widget, area);
-        return;
-    }
 
     if app.todos.is_empty() {
         let empty_text = Paragraph::new("No TODOs. Press [a] to add one.")
@@ -675,18 +615,7 @@ pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App, focused: bool)
 
 /// Render the controls/help zone displaying available hotkeys.
 pub fn render_controls_zone(frame: &mut Frame, area: Rect, app: &App) {
-    let help_text = if app.todo_input_mode {
-        if app.config.vim_mode {
-            match app.todo_input.vim_mode {
-                crate::tui::app::VimInputMode::Insert =>
-                    " -- INSERT --  [Esc] normal  [Enter] save ",
-                crate::tui::app::VimInputMode::Normal =>
-                    " -- NORMAL --  [i/a/A] insert  [x] del  [w/b] word  [Enter] save  [Esc] cancel ",
-            }
-        } else {
-            " [Enter] confirm  [Esc] cancel "
-        }
-    } else if app.pomodoro_timer.is_some() {
+    let help_text = if app.pomodoro_timer.is_some() {
         " [p] pause/resume  [s] skip break  [+] extend  [q] stop Pomodoro "
     } else {
         " [a] add  [c] complete  [→] start session  [↑↓] navigate  [n] new session "
@@ -737,16 +666,6 @@ fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
         }
     } else {
         match &app.active_tab {
-        Tab::Dashboard if app.todo_input_mode => {
-            match (app.config.vim_mode, &app.todo_input.vim_mode) {
-                (true, crate::tui::app::VimInputMode::Normal) =>
-                    "  -- NORMAL --  [i] insert  [a] append  [A] end  [I] begin  [x] del  [w/b] word  [Enter] save  [Esc] cancel",
-                (true, crate::tui::app::VimInputMode::Insert) =>
-                    "  -- INSERT --  type to edit  [Esc] → normal  [Enter] save",
-                _ =>
-                    "  [Enter] save todo  [Esc] cancel",
-            }
-        }
         Tab::Dashboard if app.pomodoro_timer.is_some() => {
             "  [p] pause/resume  [s] skip break  [+] extend break  [q] stop  [?] help"
         }

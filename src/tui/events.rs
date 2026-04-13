@@ -36,16 +36,12 @@ pub fn handle_key_event(app: &mut App, conn: &rusqlite::Connection, key: KeyEven
             return Ok(false);
         }
         KeyCode::Esc => {
-            // If in TODO input mode on Dashboard, let the TODO handler process ESC to cancel input
-            if app.active_tab == Tab::Dashboard && app.todo_input_mode {
-                return handle_dashboard_tab(app, conn, key);
-            }
-            // Otherwise, clear message overlay
+            // Clear message overlay
             app.message = None;
             return Ok(false);
         }
         KeyCode::Char('1') => {
-            if app.active_tab == Tab::Dashboard && !app.todo_input_mode {
+            if app.active_tab == Tab::Dashboard {
                 app.focused_panel_idx = Some(0);
             } else {
                 app.active_tab = Tab::Dashboard;
@@ -54,7 +50,7 @@ pub fn handle_key_event(app: &mut App, conn: &rusqlite::Connection, key: KeyEven
             return Ok(false);
         }
         KeyCode::Char('2') => {
-            if app.active_tab == Tab::Dashboard && !app.todo_input_mode {
+            if app.active_tab == Tab::Dashboard {
                 app.focused_panel_idx = Some(1);
             } else {
                 app.active_tab = Tab::Log;
@@ -64,7 +60,7 @@ pub fn handle_key_event(app: &mut App, conn: &rusqlite::Connection, key: KeyEven
             return Ok(false);
         }
         KeyCode::Char('3') => {
-            if app.active_tab == Tab::Dashboard && !app.todo_input_mode {
+            if app.active_tab == Tab::Dashboard {
                 app.focused_panel_idx = Some(2);
             } else {
                 app.active_tab = Tab::Settings;
@@ -72,8 +68,8 @@ pub fn handle_key_event(app: &mut App, conn: &rusqlite::Connection, key: KeyEven
             }
             return Ok(false);
         }
-        // Letter-based tab shortcuts (disabled during TODO input mode)
-        KeyCode::Char('d') | KeyCode::Char('D') if !app.todo_input_mode => {
+        // Letter-based tab shortcuts
+        KeyCode::Char('d') | KeyCode::Char('D') => {
             // In vim mode on Dashboard, 'd' starts 'dd' (delete) — let tab handler process it
             if !(app.config.vim_mode && app.active_tab == Tab::Dashboard) {
                 app.active_tab = Tab::Dashboard;
@@ -82,13 +78,13 @@ pub fn handle_key_event(app: &mut App, conn: &rusqlite::Connection, key: KeyEven
             }
             // Fall through to tab handler for vim 'dd'
         }
-        KeyCode::Char('l') | KeyCode::Char('L') if !app.todo_input_mode => {
+        KeyCode::Char('l') | KeyCode::Char('L') => {
             app.active_tab = Tab::Log;
             app.focused_panel_idx = None;
             app.load_log(conn)?;
             return Ok(false);
         }
-        KeyCode::Char('s') | KeyCode::Char('S') if !app.todo_input_mode => {
+        KeyCode::Char('s') | KeyCode::Char('S') => {
             app.active_tab = Tab::Settings;
             app.focused_panel_idx = None;
             return Ok(false);
@@ -171,6 +167,23 @@ pub fn handle_overlay_prompt(
                 value.clone()
             };
             match action {
+                PromptAction::AddTodo => {
+                    if !value.is_empty() {
+                        use crate::models::todo;
+                        match todo::insert(conn, &value) {
+                            Ok(_) => {
+                                let _ = app.load_todos(conn);
+                                app.message = Some(MessageOverlay::success(format!(
+                                    "TODO added: \"{value}\""
+                                )));
+                            }
+                            Err(e) => {
+                                app.message = Some(MessageOverlay::error(e.to_string()));
+                            }
+                        }
+                    }
+                    app.overlay = Overlay::None;
+                }
                 PromptAction::StartSession => {
                     app.open_prompt(
                         "Tag (optional, press Enter to skip):",
@@ -390,7 +403,7 @@ pub fn handle_dashboard_tab(
     key: KeyEvent,
 ) -> Result<bool> {
     // [F] toggles full Pomodoro panel view (US11)
-    if key.code == KeyCode::Char('f') && !app.todo_input_mode {
+    if key.code == KeyCode::Char('f') {
         app.full_pomodoro_panel = !app.full_pomodoro_panel;
         return Ok(false);
     }
@@ -407,7 +420,7 @@ pub fn handle_dashboard_tab(
     }
 
     // Pomodoro controls (when Pomodoro timer is active)
-    if app.pomodoro_timer.is_some() && !app.todo_input_mode {
+    if app.pomodoro_timer.is_some() {
         match key.code {
             KeyCode::Char('p') | KeyCode::Char('P') => {
                 if let Some(ref mut timer) = app.pomodoro_timer {
@@ -450,7 +463,7 @@ pub fn handle_dashboard_tab(
     }
 
     match key.code {
-        KeyCode::Char('e') | KeyCode::Char('E') | KeyCode::Enter if !app.todo_input_mode => {
+        KeyCode::Char('e') | KeyCode::Char('E') | KeyCode::Enter => {
             match session_store::stop_session(conn) {
                 Ok(session) => {
                     let elapsed = session
@@ -473,7 +486,7 @@ pub fn handle_dashboard_tab(
                 }
             }
         }
-        KeyCode::Char('n') | KeyCode::Char('N') if !app.todo_input_mode => {
+        KeyCode::Char('n') | KeyCode::Char('N') => {
             if app.active_session.is_some() {
                 app.message = Some(MessageOverlay::warning("Session already running."));
             } else if app.pomodoro_timer.is_some() {
@@ -487,78 +500,73 @@ pub fn handle_dashboard_tab(
         _ => {
             use crate::tui::keyboard::KeyAction;
 
-            if app.todo_input_mode {
-                // Delegate to simple todo handler for text input (works in both vim and non-vim mode)
-                crate::tui::handlers_todo::handle_todo_key(app, conn, key.code)?;
-            } else {
-                // Not in input mode — route through keyboard handler for vim-aware navigation
-                // Sync vim_mode from config (may differ if settings were changed at runtime)
-                app.keyboard_handler.set_vim_mode(app.config.vim_mode);
-                let action = app.keyboard_handler.handle_key(key);
-                let len = app.todos.len();
-                match action {
-                    KeyAction::FocusDown => {
-                        if len > 0 {
-                            app.selected_todo_idx = Some(match app.selected_todo_idx {
-                                None => 0,
-                                Some(i) if i + 1 < len => i + 1,
-                                Some(i) => i,
-                            });
-                        }
+            // Route through keyboard handler for vim-aware navigation
+            // Sync vim_mode from config (may differ if settings were changed at runtime)
+            app.keyboard_handler.set_vim_mode(app.config.vim_mode);
+            let action = app.keyboard_handler.handle_key(key);
+            let len = app.todos.len();
+            match action {
+                KeyAction::FocusDown => {
+                    if len > 0 {
+                        app.selected_todo_idx = Some(match app.selected_todo_idx {
+                            None => 0,
+                            Some(i) if i + 1 < len => i + 1,
+                            Some(i) => i,
+                        });
                     }
-                    KeyAction::FocusUp => {
-                        if len > 0 {
-                            app.selected_todo_idx = Some(match app.selected_todo_idx {
-                                None => 0,
-                                Some(i) if i > 0 => i - 1,
-                                Some(i) => i,
-                            });
-                        }
+                }
+                KeyAction::FocusUp => {
+                    if len > 0 {
+                        app.selected_todo_idx = Some(match app.selected_todo_idx {
+                            None => 0,
+                            Some(i) if i > 0 => i - 1,
+                            Some(i) => i,
+                        });
                     }
-                    KeyAction::JumpTop => {
-                        if len > 0 {
-                            app.selected_todo_idx = Some(0);
-                        }
+                }
+                KeyAction::JumpTop => {
+                    if len > 0 {
+                        app.selected_todo_idx = Some(0);
                     }
-                    KeyAction::JumpBottom => {
-                        if len > 0 {
-                            app.selected_todo_idx = Some(len - 1);
-                        }
+                }
+                KeyAction::JumpBottom => {
+                    if len > 0 {
+                        app.selected_todo_idx = Some(len - 1);
                     }
-                    KeyAction::DeleteItem => {
-                        // Auto-select first todo if nothing selected yet
-                        if app.selected_todo_idx.is_none() && len > 0 {
-                            app.selected_todo_idx = Some(0);
-                        }
-                        if let Some(idx) = app.selected_todo_idx {
-                            if idx < len {
-                                let todo_id = app.todos[idx].id;
-                                if crate::models::todo::can_delete(conn, todo_id)? {
-                                    crate::models::todo::delete(conn, todo_id)?;
-                                    app.load_todos(conn)?;
-                                    let new_len = app.todos.len();
-                                    app.selected_todo_idx = if new_len == 0 {
-                                        None
-                                    } else {
-                                        Some(idx.min(new_len - 1))
-                                    };
-                                    app.message =
-                                        Some(MessageOverlay::success("Todo deleted."));
+                }
+                KeyAction::DeleteItem => {
+                    // Auto-select first todo if nothing selected yet
+                    if app.selected_todo_idx.is_none() && len > 0 {
+                        app.selected_todo_idx = Some(0);
+                    }
+                    if let Some(idx) = app.selected_todo_idx {
+                        if idx < len {
+                            let todo_id = app.todos[idx].id;
+                            if crate::models::todo::can_delete(conn, todo_id)? {
+                                crate::models::todo::delete(conn, todo_id)?;
+                                app.load_todos(conn)?;
+                                let new_len = app.todos.len();
+                                app.selected_todo_idx = if new_len == 0 {
+                                    None
                                 } else {
-                                    app.message = Some(MessageOverlay::error(
-                                        "Cannot delete TODO linked to active session",
-                                    ));
-                                }
+                                    Some(idx.min(new_len - 1))
+                                };
+                                app.message =
+                                    Some(MessageOverlay::success("Todo deleted."));
+                            } else {
+                                app.message = Some(MessageOverlay::error(
+                                    "Cannot delete TODO linked to active session",
+                                ));
                             }
                         }
                     }
-                    KeyAction::None => {
-                        // Not a vim/nav command — delegate to todo handler (a, c, s, Enter, etc.)
-                        crate::tui::handlers_todo::handle_todo_key(app, conn, key.code)?;
-                    }
-                    _ => {
-                        crate::tui::handlers_todo::handle_todo_key(app, conn, key.code)?;
-                    }
+                }
+                KeyAction::None => {
+                    // Not a vim/nav command — delegate to todo handler (a, c, s, Enter, etc.)
+                    crate::tui::handlers_todo::handle_todo_key(app, conn, key.code)?;
+                }
+                _ => {
+                    crate::tui::handlers_todo::handle_todo_key(app, conn, key.code)?;
                 }
             }
         }

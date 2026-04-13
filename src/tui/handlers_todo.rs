@@ -3,30 +3,13 @@ use crossterm::event::KeyCode;
 use rusqlite::Connection;
 
 use crate::models::todo;
-use crate::tui::app::App;
-use crate::tui::text_input::TextInputEvent;
+use crate::tui::app::{App, PromptAction};
 
-/// Handle TODO-related keyboard input.
+/// Handle TODO-related keyboard input (viewing mode only — input is handled via Overlay::Prompt).
 pub fn handle_todo_key(app: &mut App, db: &Connection, key: KeyCode) -> anyhow::Result<()> {
-    if app.todo_input_mode {
-        match app.todo_input.handle_key(key) {
-            TextInputEvent::Submit(text) if !text.is_empty() => {
-                todo::insert(db, &text)?;
-                app.exit_todo_input_mode();
-                app.load_todos(db)?;
-            }
-            TextInputEvent::Submit(_) | TextInputEvent::Cancel => {
-                app.exit_todo_input_mode();
-            }
-            TextInputEvent::Continue => {}
-        }
-        return Ok(());
-    }
-
-    // ── Viewing mode keys ──────────────────────────────────────────────────────
     match key {
         KeyCode::Char('a') => {
-            app.enter_todo_input_mode();
+            app.open_prompt("Add TODO:", "", PromptAction::AddTodo);
         }
         KeyCode::Delete | KeyCode::Backspace if app.selected_todo_idx.is_some() => {
             if let Some(idx) = app.selected_todo_idx {

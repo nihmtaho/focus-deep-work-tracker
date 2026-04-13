@@ -18,18 +18,22 @@ mod tests {
         App::new(false, config)
     }
 
-    // T036: Test handle_add_todo_input() triggers input mode on 'a' key
+    // T036: Test that 'a' key opens the AddTodo prompt overlay
     #[test]
-    fn test_add_todo_hotkey_enters_input_mode() {
-        let _db = setup_test_db();
-        let app = create_test_app();
+    fn test_add_todo_hotkey_opens_prompt() {
+        use crossterm::event::KeyCode;
+        use focus::tui::app::{Overlay, PromptAction};
+        use focus::tui::handlers_todo::handle_todo_key;
 
-        // Simulate pressing 'a' key in normal mode
-        // This test documents expected behavior
-        // Actual implementation will handle KeyCode::Char('a')
+        let db = setup_test_db();
+        let mut app = create_test_app();
 
-        assert!(!app.todo_input_mode);
-        // After handling 'a' key: app.todo_input_mode should be true
+        assert!(matches!(app.overlay, Overlay::None));
+        handle_todo_key(&mut app, &db, KeyCode::Char('a')).unwrap();
+        assert!(matches!(
+            app.overlay,
+            Overlay::Prompt { action: PromptAction::AddTodo, .. }
+        ));
     }
 
     // T037: Test handle_mark_complete() on 'c' key

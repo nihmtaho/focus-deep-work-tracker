@@ -5,7 +5,7 @@ use crate::models::session::Session;
 use crate::models::todo::Todo;
 use crate::pomodoro::config::PomodoroConfig;
 use crate::pomodoro::timer::PomodoroTimer;
-use crate::tui::keyboard::{KeyContext, KeyHandler};
+use crate::tui::keyboard::{KeyHandler};
 use crate::tui::report::ReportMetrics;
 use crate::tui::text_input::TextInput;
 
@@ -84,6 +84,7 @@ pub enum Tab {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PromptAction {
+    AddTodo,
     StartSession,
     /// Second step: user already entered task name, now entering optional tag.
     StartSessionTag {
@@ -179,10 +180,7 @@ pub struct App {
     // TODO fields for 007-ui-refresh feature
     pub todos: Vec<Todo>,
     pub selected_todo_idx: Option<usize>,
-    pub todo_input_mode: bool,
-    /// Vim-aware text input state for the todo add field.
-    pub todo_input: TextInput,
-    /// Vim-aware text input state for overlay prompt fields (session name, tag, rename).
+    /// Vim-aware text input state for all prompt overlays (todo add, session name, tag, rename).
     pub prompt_input: TextInput,
     // Keyboard handler for context-aware input routing
     pub keyboard_handler: KeyHandler,
@@ -225,8 +223,6 @@ impl App {
             settings_selected: 0,
             todos: Vec::new(),
             selected_todo_idx: None,
-            todo_input_mode: false,
-            todo_input: TextInput::new(vim_mode),
             prompt_input: TextInput::new(vim_mode),
             keyboard_handler: KeyHandler::new(vim_mode),
             focused_panel_idx: None,
@@ -357,21 +353,6 @@ impl App {
     pub fn count_completed(conn: &rusqlite::Connection) -> anyhow::Result<usize> {
         use crate::db::session_store;
         session_store::count_completed(conn)
-    }
-
-    /// Enter TODO input mode: set keyboard context to Input and reset todo_input.
-    pub fn enter_todo_input_mode(&mut self) {
-        self.todo_input_mode = true;
-        self.todo_input.set_vim_enabled(self.config.vim_mode);
-        self.todo_input.reset();
-        self.keyboard_handler.set_context(KeyContext::Input);
-    }
-
-    /// Exit TODO input mode: set keyboard context to Viewing and reset todo_input.
-    pub fn exit_todo_input_mode(&mut self) {
-        self.todo_input_mode = false;
-        self.todo_input.reset();
-        self.keyboard_handler.set_context(KeyContext::Viewing);
     }
 
     /// Open a Prompt overlay and prepare prompt_input (reset or pre-fill).
