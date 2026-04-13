@@ -1,5 +1,7 @@
+use crate::theme::ThemeColors;
 use anyhow::Result;
 use chrono::Utc;
+use ratatui::style::Color;
 use rusqlite::Connection;
 use serde::Serialize;
 
@@ -20,6 +22,16 @@ impl Todo {
 
     pub fn is_completed(&self) -> bool {
         self.status == "completed"
+    }
+
+    /// Get the color for this TODO based on its status using theme colors.
+    /// Returns the appropriate color from the theme for the current status.
+    pub fn get_color(&self, theme_colors: &ThemeColors) -> Color {
+        if self.is_completed() {
+            theme_colors.todo_completed
+        } else {
+            theme_colors.todo_todo
+        }
     }
 }
 
@@ -120,4 +132,139 @@ pub fn can_delete(conn: &Connection, id: u64) -> Result<bool> {
         |row| row.get(0),
     )?;
     Ok(count == 0)
+}
+
+/// Get color for a TODO status using theme colors.
+/// Maps "active" → todo_todo color, "completed" → todo_completed color.
+pub fn get_color_for_state(status: &str, theme_colors: &ThemeColors) -> Color {
+    match status {
+        "completed" => theme_colors.todo_completed,
+        _ => theme_colors.todo_todo, // Default to active color for any other status
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_todo_get_color_for_active_status() {
+        // Create a mock theme with distinct colors for testing
+        let theme_colors = ThemeColors {
+            primary: Color::Blue,
+            secondary: Color::Cyan,
+            accent: Color::Yellow,
+            success: Color::Green,
+            warning: Color::Yellow,
+            error: Color::Red,
+            background: Color::Black,
+            foreground: Color::White,
+            panel_border: Color::Blue,
+            panel_focus_border: Color::Cyan,
+            todo_todo: Color::White,
+            todo_in_session: Color::Yellow,
+            todo_completed: Color::Gray,
+            tag_color: Color::Cyan,
+            session_title: Color::White,
+            timer_digit: Color::Cyan,
+            timer_separator: Color::Gray,
+        };
+
+        let color = get_color_for_state("active", &theme_colors);
+        assert_eq!(color, Color::White);
+    }
+
+    #[test]
+    fn test_todo_get_color_for_completed_status() {
+        let theme_colors = ThemeColors {
+            primary: Color::Blue,
+            secondary: Color::Cyan,
+            accent: Color::Yellow,
+            success: Color::Green,
+            warning: Color::Yellow,
+            error: Color::Red,
+            background: Color::Black,
+            foreground: Color::White,
+            panel_border: Color::Blue,
+            panel_focus_border: Color::Cyan,
+            todo_todo: Color::White,
+            todo_in_session: Color::Yellow,
+            todo_completed: Color::Gray,
+            tag_color: Color::Cyan,
+            session_title: Color::White,
+            timer_digit: Color::Cyan,
+            timer_separator: Color::Gray,
+        };
+
+        let color = get_color_for_state("completed", &theme_colors);
+        assert_eq!(color, Color::Gray);
+    }
+
+    #[test]
+    fn test_todo_instance_get_color_active() {
+        let theme_colors = ThemeColors {
+            primary: Color::Blue,
+            secondary: Color::Cyan,
+            accent: Color::Yellow,
+            success: Color::Green,
+            warning: Color::Yellow,
+            error: Color::Red,
+            background: Color::Black,
+            foreground: Color::White,
+            panel_border: Color::Blue,
+            panel_focus_border: Color::Cyan,
+            todo_todo: Color::White,
+            todo_in_session: Color::Yellow,
+            todo_completed: Color::Gray,
+            tag_color: Color::Cyan,
+            session_title: Color::White,
+            timer_digit: Color::Cyan,
+            timer_separator: Color::Gray,
+        };
+
+        let todo = Todo {
+            id: 1,
+            title: "Test TODO".to_string(),
+            status: "active".to_string(),
+            created_at: 0,
+            completed_at: None,
+        };
+
+        let color = todo.get_color(&theme_colors);
+        assert_eq!(color, Color::White);
+    }
+
+    #[test]
+    fn test_todo_instance_get_color_completed() {
+        let theme_colors = ThemeColors {
+            primary: Color::Blue,
+            secondary: Color::Cyan,
+            accent: Color::Yellow,
+            success: Color::Green,
+            warning: Color::Yellow,
+            error: Color::Red,
+            background: Color::Black,
+            foreground: Color::White,
+            panel_border: Color::Blue,
+            panel_focus_border: Color::Cyan,
+            todo_todo: Color::White,
+            todo_in_session: Color::Yellow,
+            todo_completed: Color::Gray,
+            tag_color: Color::Cyan,
+            session_title: Color::White,
+            timer_digit: Color::Cyan,
+            timer_separator: Color::Gray,
+        };
+
+        let todo = Todo {
+            id: 1,
+            title: "Test TODO".to_string(),
+            status: "completed".to_string(),
+            created_at: 0,
+            completed_at: Some(100),
+        };
+
+        let color = todo.get_color(&theme_colors);
+        assert_eq!(color, Color::Gray);
+    }
 }

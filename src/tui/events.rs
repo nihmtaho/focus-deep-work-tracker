@@ -7,7 +7,7 @@ use crate::display::format::format_elapsed;
 use crate::error::FocusError;
 use crate::pomodoro::config::PomodoroConfig;
 use crate::pomodoro::timer::PomodoroTimer;
-use crate::tui::app::{idx_to_window, App, MessageOverlay, Overlay, PromptAction, Tab};
+use crate::tui::app::{App, MessageOverlay, Overlay, PromptAction, Tab};
 
 /// Handle a key event. Returns true if the app should quit.
 pub fn handle_key_event(app: &mut App, conn: &rusqlite::Connection, key: KeyEvent) -> Result<bool> {
@@ -24,10 +24,10 @@ pub fn handle_key_event(app: &mut App, conn: &rusqlite::Connection, key: KeyEven
     // Global keys (no overlay)
     match key.code {
         KeyCode::Char('q') | KeyCode::Char('Q') => {
-            // If Pomodoro timer is active, let the Pomodoro tab handle Q
+            // If Pomodoro timer is active on Dashboard, delegate to dashboard handler
             // so it can show the confirm-stop dialog instead of quitting.
-            if app.active_tab == Tab::Pomodoro && app.pomodoro_timer.is_some() {
-                return handle_pomodoro_tab(app, conn, key);
+            if app.active_tab == Tab::Dashboard && app.pomodoro_timer.is_some() {
+                return handle_dashboard_tab(app, conn, key);
             }
             return Ok(true);
         }
@@ -36,70 +36,81 @@ pub fn handle_key_event(app: &mut App, conn: &rusqlite::Connection, key: KeyEven
             return Ok(false);
         }
         KeyCode::Esc => {
+            // If in TODO input mode on Dashboard, let the TODO handler process ESC to cancel input
+            if app.active_tab == Tab::Dashboard && app.todo_input_mode {
+                return handle_dashboard_tab(app, conn, key);
+            }
+            // Otherwise, clear message overlay
             app.message = None;
             return Ok(false);
         }
         KeyCode::Char('1') => {
-            app.active_tab = Tab::Dashboard;
+            if app.active_tab == Tab::Dashboard && !app.todo_input_mode {
+                app.focused_panel_idx = Some(0);
+            } else {
+                app.active_tab = Tab::Dashboard;
+                app.focused_panel_idx = None;
+            }
             return Ok(false);
         }
         KeyCode::Char('2') => {
-            app.active_tab = Tab::Log;
-            app.load_log(conn)?;
+            if app.active_tab == Tab::Dashboard && !app.todo_input_mode {
+                app.focused_panel_idx = Some(1);
+            } else {
+                app.active_tab = Tab::Log;
+                app.focused_panel_idx = None;
+                app.load_log(conn)?;
+            }
             return Ok(false);
         }
         KeyCode::Char('3') => {
-            app.active_tab = Tab::Report;
-            let window = app.report_window.clone();
-            app.load_report(conn, &window)?;
+            if app.active_tab == Tab::Dashboard && !app.todo_input_mode {
+                app.focused_panel_idx = Some(2);
+            } else {
+                app.active_tab = Tab::Settings;
+                app.focused_panel_idx = None;
+            }
             return Ok(false);
         }
-        KeyCode::Char('4') => {
+        // Letter-based tab shortcuts (disabled during TODO input mode)
+        KeyCode::Char('d') | KeyCode::Char('D') if !app.todo_input_mode => {
+            app.active_tab = Tab::Dashboard;
+            app.focused_panel_idx = None;
+            return Ok(false);
+        }
+        KeyCode::Char('l') | KeyCode::Char('L') if !app.todo_input_mode => {
+            app.active_tab = Tab::Log;
+            app.focused_panel_idx = None;
+            app.load_log(conn)?;
+            return Ok(false);
+        }
+        KeyCode::Char('s') | KeyCode::Char('S') if !app.todo_input_mode => {
             app.active_tab = Tab::Settings;
-            return Ok(false);
-        }
-        KeyCode::Char('5') => {
-            app.active_tab = Tab::Pomodoro;
+            app.focused_panel_idx = None;
             return Ok(false);
         }
         KeyCode::Tab => {
             app.active_tab = match app.active_tab {
                 Tab::Dashboard => Tab::Log,
-                Tab::Log => Tab::Report,
-                Tab::Report => Tab::Settings,
-                Tab::Settings => Tab::Pomodoro,
-                Tab::Pomodoro => Tab::Dashboard,
+                Tab::Log => Tab::Settings,
+                Tab::Settings => Tab::Dashboard,
             };
-            // Load data when switching to data tabs
-            match app.active_tab {
-                Tab::Log => {
-                    app.load_log(conn)?;
-                }
-                Tab::Report => {
-                    let window = app.report_window.clone();
-                    app.load_report(conn, &window)?;
-                }
-                _ => {}
+            app.focused_panel_idx = None;
+            // Load data when switching to Log tab
+            if app.active_tab == Tab::Log {
+                app.load_log(conn)?;
             }
             return Ok(false);
         }
         KeyCode::BackTab => {
             app.active_tab = match app.active_tab {
-                Tab::Dashboard => Tab::Pomodoro,
+                Tab::Dashboard => Tab::Settings,
                 Tab::Log => Tab::Dashboard,
-                Tab::Report => Tab::Log,
-                Tab::Settings => Tab::Report,
-                Tab::Pomodoro => Tab::Settings,
+                Tab::Settings => Tab::Log,
             };
-            match app.active_tab {
-                Tab::Log => {
-                    app.load_log(conn)?;
-                }
-                Tab::Report => {
-                    let window = app.report_window.clone();
-                    app.load_report(conn, &window)?;
-                }
-                _ => {}
+            app.focused_panel_idx = None;
+            if app.active_tab == Tab::Log {
+                app.load_log(conn)?;
             }
             return Ok(false);
         }
@@ -111,9 +122,7 @@ pub fn handle_key_event(app: &mut App, conn: &rusqlite::Connection, key: KeyEven
     match tab {
         Tab::Dashboard => handle_dashboard_tab(app, conn, key),
         Tab::Log => handle_log_tab(app, conn, key),
-        Tab::Report => handle_report_tab(app, conn, key),
         Tab::Settings => handle_settings_tab(app, key),
-        Tab::Pomodoro => handle_pomodoro_tab(app, conn, key),
     }
 }
 
@@ -197,7 +206,12 @@ pub fn handle_overlay_prompt(
                             let todo_id = app
                                 .selected_todo_idx
                                 .and_then(|idx| app.todos.get(idx).map(|t| t.id));
-                            session_store::insert_session_with_todo(conn, &task, tag_opt.as_deref(), todo_id)?;
+                            session_store::insert_session_with_todo(
+                                conn,
+                                &task,
+                                tag_opt.as_deref(),
+                                todo_id,
+                            )?;
                             app.message = Some(MessageOverlay::success(format!(
                                 "Session started: \"{task}\""
                             )));
@@ -244,13 +258,18 @@ pub fn handle_overlay_prompt(
                         .and_then(|idx| app.todos.get(idx).map(|t| t.id));
 
                     // Create a database session record with optional TODO link
-                    session_store::insert_session_with_todo(conn, &task, tag_opt.as_deref(), todo_id)?;
+                    session_store::insert_session_with_todo(
+                        conn,
+                        &task,
+                        tag_opt.as_deref(),
+                        todo_id,
+                    )?;
 
                     let config =
                         PomodoroConfig::resolve(None, None, None, None).unwrap_or_default();
                     let timer = PomodoroTimer::new(task, tag_opt, config);
                     app.pomodoro_timer = Some(timer);
-                    app.active_tab = Tab::Pomodoro;
+                    app.active_tab = Tab::Dashboard;
                     app.overlay = Overlay::None;
                     app.message = Some(MessageOverlay::success("Pomodoro started!"));
                 }
@@ -405,6 +424,66 @@ pub fn handle_dashboard_tab(
     conn: &rusqlite::Connection,
     key: KeyEvent,
 ) -> Result<bool> {
+    // [F] toggles full Pomodoro panel view (US11)
+    if key.code == KeyCode::Char('f') && !app.todo_input_mode {
+        app.full_pomodoro_panel = !app.full_pomodoro_panel;
+        return Ok(false);
+    }
+
+    // [Q] and [Esc] collapse full Pomodoro panel (US11)
+    if app.full_pomodoro_panel {
+        match key.code {
+            KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => {
+                app.full_pomodoro_panel = false;
+                return Ok(false);
+            }
+            _ => {}
+        }
+    }
+
+    // Pomodoro controls (when Pomodoro timer is active)
+    if app.pomodoro_timer.is_some() && !app.todo_input_mode {
+        match key.code {
+            KeyCode::Char('p') | KeyCode::Char('P') => {
+                if let Some(ref mut timer) = app.pomodoro_timer {
+                    if timer.paused {
+                        timer.resume();
+                    } else {
+                        timer.pause();
+                    }
+                }
+                return Ok(false);
+            }
+            KeyCode::Char('s') | KeyCode::Char('S') => {
+                if let Some(ref mut timer) = app.pomodoro_timer {
+                    timer.skip_break();
+                }
+                return Ok(false);
+            }
+            KeyCode::Char('+') => {
+                if let Some(ref mut timer) = app.pomodoro_timer {
+                    timer.extend();
+                }
+                return Ok(false);
+            }
+            KeyCode::Char('q') | KeyCode::Char('Q') => {
+                let in_work = app
+                    .pomodoro_timer
+                    .as_ref()
+                    .is_some_and(|t| t.is_in_work_phase());
+                if in_work {
+                    app.overlay = Overlay::PomodoroConfirmStop;
+                } else {
+                    app.pomodoro_timer = None;
+                    let _ = app.load_dashboard(conn);
+                    app.message = Some(MessageOverlay::success("Pomodoro finished."));
+                }
+                return Ok(false);
+            }
+            _ => {}
+        }
+    }
+
     match key.code {
         KeyCode::Char('e') | KeyCode::Char('E') | KeyCode::Enter if !app.todo_input_mode => {
             match session_store::stop_session(conn) {
@@ -513,79 +592,6 @@ pub fn handle_log_tab(app: &mut App, conn: &rusqlite::Connection, key: KeyEvent)
         _ => {}
     }
     let _ = conn; // not used in most paths
-    Ok(false)
-}
-
-pub fn handle_report_tab(
-    app: &mut App,
-    conn: &rusqlite::Connection,
-    key: KeyEvent,
-) -> Result<bool> {
-    const WINDOW_COUNT: usize = 3;
-    match key.code {
-        KeyCode::Char('h') | KeyCode::Left => {
-            let new_idx = if app.report_selected_window == 0 {
-                WINDOW_COUNT - 1
-            } else {
-                app.report_selected_window - 1
-            };
-            let new_window = idx_to_window(new_idx);
-            app.load_report(conn, &new_window)?;
-        }
-        KeyCode::Char('l') | KeyCode::Right => {
-            let new_idx = (app.report_selected_window + 1) % WINDOW_COUNT;
-            let new_window = idx_to_window(new_idx);
-            app.load_report(conn, &new_window)?;
-        }
-        _ => {}
-    }
-    Ok(false)
-}
-
-pub fn handle_pomodoro_tab(
-    app: &mut App,
-    conn: &rusqlite::Connection,
-    key: KeyEvent,
-) -> Result<bool> {
-    match key.code {
-        KeyCode::Char('p') | KeyCode::Char('P') => {
-            if let Some(ref mut timer) = app.pomodoro_timer {
-                if timer.paused {
-                    timer.resume();
-                } else {
-                    timer.pause();
-                }
-            }
-        }
-        KeyCode::Char('s') | KeyCode::Char('S') => {
-            if let Some(ref mut timer) = app.pomodoro_timer {
-                timer.skip_break();
-            }
-        }
-        KeyCode::Char('+') => {
-            if let Some(ref mut timer) = app.pomodoro_timer {
-                timer.extend();
-            }
-        }
-        KeyCode::Char('q') | KeyCode::Char('Q') => {
-            if app.pomodoro_timer.is_some() {
-                let in_work = app
-                    .pomodoro_timer
-                    .as_ref()
-                    .is_some_and(|t| t.is_in_work_phase());
-                if in_work {
-                    app.overlay = Overlay::PomodoroConfirmStop;
-                } else {
-                    // In a break phase — stop without abandon penalty
-                    app.pomodoro_timer = None;
-                    app.active_tab = Tab::Dashboard;
-                    let _ = app.load_dashboard(conn);
-                    app.message = Some(MessageOverlay::success("Pomodoro finished."));
-                }
-            }
-        }
-        _ => {}
-    }
     Ok(false)
 }
 
@@ -939,24 +945,29 @@ mod tests {
     fn key_2_sets_log_tab() {
         let (conn, _f) = test_conn();
         let mut app = make_app();
+        // '2' switches to Log only when NOT on Dashboard (on Dashboard it focuses panel 1)
+        app.active_tab = Tab::Settings;
         handle_key_event(&mut app, &conn, make_key(KeyCode::Char('2'))).unwrap();
         assert_eq!(app.active_tab, Tab::Log);
     }
 
     #[test]
-    fn key_3_sets_report_tab() {
+    fn key_3_sets_settings_tab() {
         let (conn, _f) = test_conn();
         let mut app = make_app();
+        // '3' switches to Settings only when NOT on Dashboard (on Dashboard it focuses panel 2)
+        app.active_tab = Tab::Log;
         handle_key_event(&mut app, &conn, make_key(KeyCode::Char('3'))).unwrap();
-        assert_eq!(app.active_tab, Tab::Report);
+        assert_eq!(app.active_tab, Tab::Settings);
     }
 
     #[test]
-    fn key_4_sets_settings_tab() {
+    fn key_4_does_nothing() {
         let (conn, _f) = test_conn();
         let mut app = make_app();
         handle_key_event(&mut app, &conn, make_key(KeyCode::Char('4'))).unwrap();
-        assert_eq!(app.active_tab, Tab::Settings);
+        // '4' no longer switches to a Pomodoro tab; stays on Dashboard
+        assert_eq!(app.active_tab, Tab::Dashboard);
     }
 
     #[test]
@@ -967,11 +978,7 @@ mod tests {
         handle_key_event(&mut app, &conn, make_key(KeyCode::Tab)).unwrap();
         assert_eq!(app.active_tab, Tab::Log);
         handle_key_event(&mut app, &conn, make_key(KeyCode::Tab)).unwrap();
-        assert_eq!(app.active_tab, Tab::Report);
-        handle_key_event(&mut app, &conn, make_key(KeyCode::Tab)).unwrap();
         assert_eq!(app.active_tab, Tab::Settings);
-        handle_key_event(&mut app, &conn, make_key(KeyCode::Tab)).unwrap();
-        assert_eq!(app.active_tab, Tab::Pomodoro);
         handle_key_event(&mut app, &conn, make_key(KeyCode::Tab)).unwrap();
         assert_eq!(app.active_tab, Tab::Dashboard);
     }

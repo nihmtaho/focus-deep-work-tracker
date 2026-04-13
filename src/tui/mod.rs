@@ -1,6 +1,10 @@
 pub mod app;
 pub mod events;
 pub mod handlers_todo;
+pub mod keyboard;
+pub mod report;
+pub mod themes;
+pub mod timer_display;
 pub mod ui;
 pub mod views;
 
@@ -19,7 +23,7 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 
 use crate::config::{config_file_path, load_config};
 use crate::db::session_store;
-use crate::tui::app::{App, Tab};
+use crate::tui::app::App;
 use crate::tui::events::handle_key_event;
 use crate::tui::ui::render;
 
@@ -146,41 +150,36 @@ fn run_app(
         if elapsed_secs >= 1 {
             last_tick += Duration::from_secs(elapsed_secs);
 
-            if app.active_tab == Tab::Pomodoro {
-                if let Some(ref mut timer) = app.pomodoro_timer {
-                    let events = timer.tick_secs(elapsed_secs, conn)?;
-                    for event in events {
-                        use crate::pomodoro::timer::TimerEvent;
-                        match event {
-                            TimerEvent::PhaseComplete { to, .. } => {
-                                use crate::models::pomodoro::PomodoroPhase;
-                                let (title, body) = match to {
-                                    PomodoroPhase::Work => ("Focus!", "Break over — time to work."),
-                                    PomodoroPhase::Break => ("Break time!", "Work phase complete."),
-                                    PomodoroPhase::LongBreak => {
-                                        ("Long break!", "Take a longer rest.")
-                                    }
-                                };
-                                app.message = Some(crate::tui::app::MessageOverlay::success(
-                                    body.to_string(),
-                                ));
-                                crate::pomodoro::notify::send_notification(title, body);
-                            }
-                            TimerEvent::AutoAbandoned { .. } => {
-                                app.pomodoro_timer = None;
-                                app.active_tab = Tab::Dashboard;
-                                let _ = app.load_dashboard(conn);
-                                app.message = Some(crate::tui::app::MessageOverlay::error(
-                                    "Pomodoro abandoned: paused too long.",
-                                ));
-                            }
-                            _ => {}
+            // Tick Pomodoro timer regardless of active tab
+            if let Some(ref mut timer) = app.pomodoro_timer {
+                let events = timer.tick_secs(elapsed_secs, conn)?;
+                for event in events {
+                    use crate::pomodoro::timer::TimerEvent;
+                    match event {
+                        TimerEvent::PhaseComplete { to, .. } => {
+                            use crate::models::pomodoro::PomodoroPhase;
+                            let (title, body) = match to {
+                                PomodoroPhase::Work => ("Focus!", "Break over — time to work."),
+                                PomodoroPhase::Break => ("Break time!", "Work phase complete."),
+                                PomodoroPhase::LongBreak => ("Long break!", "Take a longer rest."),
+                            };
+                            app.message =
+                                Some(crate::tui::app::MessageOverlay::success(body.to_string()));
+                            crate::pomodoro::notify::send_notification(title, body);
                         }
+                        TimerEvent::AutoAbandoned { .. } => {
+                            app.pomodoro_timer = None;
+                            let _ = app.load_dashboard(conn);
+                            app.message = Some(crate::tui::app::MessageOverlay::error(
+                                "Pomodoro abandoned: paused too long.",
+                            ));
+                        }
+                        _ => {}
                     }
                 }
-            } else if app.active_tab == Tab::Dashboard {
-                app.tick_dashboard(conn)?;
             }
+            // Always tick dashboard (refreshes active session elapsed time)
+            app.tick_dashboard(conn)?;
         }
     }
 

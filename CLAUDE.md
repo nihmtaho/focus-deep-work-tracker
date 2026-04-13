@@ -38,4 +38,60 @@ Rust stable (1.77+): Follow standard conventions
 
 
 <!-- MANUAL ADDITIONS START -->
+
+## 008: Dashboard UI/UX Enhancements (2026-04)
+
+### Architecture Patterns
+
+**Theme system** (`src/theme/`):
+- Each theme is a `FocusTheme` struct in its own file (`dark.rs`, `light.rs`, `material.rs`, `onedark.rs`)
+- Themes expose typed color fields (`primary`, `secondary`, `success`, `warning`, `error`, `timer_digit`, `timer_separator`)
+- `src/theme/mod.rs` resolves theme name → struct; falls back to `dark` on unknown name
+- `app.theme_name: String` stores the chosen theme; `tui::themes::load_theme(&name)` returns the struct
+- `NO_COLOR` is checked once at startup and stored in `App.no_color`; all render paths guard on it
+
+**Flip-clock timer display** (`src/tui/timer_display.rs`):
+- Renders digits as 3×5 block characters using Unicode box-drawing / block elements
+- `TimerDisplay::render_into(frame, area, secs, theme, no_color)` is the single entry point
+- Two usage sites: `views/dashboard.rs` (running session) and `views/pomodoro.rs` (pomodoro timer)
+- When `no_color = true`, all Color fields are ignored and default `Style::default()` is used
+
+**Keyboard context system** (`src/tui/keyboard.rs`):
+- `KeyboardContext` enum: `Normal`, `TodoInput`, `ConfirmQuit`
+- Stored in `App.keyboard_context`; `handle_key_event` dispatches on context first, then tab
+- Letter shortcuts `d/l/p/r` switch tabs from `Normal` context only
+- ESC in `TodoInput` cancels input without committing; ESC in `Normal` shows quit confirm
+
+**Report panel** (`src/tui/report.rs`):
+- Queries sessions, pomodoro_stats, and todos tables
+- `ReportMetrics` struct holds all aggregated values; built once per tab-switch + periodic refresh
+- Bar chart uses ratatui `BarChart` widget; summary section uses `Table`
+
+**TUI event loop** (`src/tui/mod.rs`):
+- `event::poll(Duration::from_millis(250))` — key events return immediately on press (<1ms latency)
+- 250ms timeout drives timer tick and UI refresh; well under perceptible lag threshold
+- `last_tick` advances by whole elapsed seconds; pomodoro timer uses `tick_secs(elapsed, conn)`
+
+### Key Files Added in 008
+
+| File | Purpose |
+|---|---|
+| `src/theme/mod.rs` | Theme loader + `FocusTheme` struct |
+| `src/theme/{dark,light,material,onedark}.rs` | Theme implementations |
+| `src/tui/timer_display.rs` | Flip-clock digit renderer |
+| `src/tui/report.rs` | Report panel metrics + rendering |
+| `src/tui/keyboard.rs` | Keyboard context switching |
+| `src/tui/themes.rs` | Theme integration helpers |
+| `tests/integration/test_theme_loading.rs` | Theme + NO_COLOR tests |
+| `tests/integration/test_pomodoro_panel.rs` | Pomodoro panel state tests |
+
+### Commands
+
+```bash
+cargo test                        # 142 tests (115 unit + 27 integration)
+cargo clippy -- -D warnings       # zero warnings policy
+cargo fmt                         # required before every commit
+NO_COLOR=1 focus ui               # verify ANSI-free output (Principle IV)
+```
+
 <!-- MANUAL ADDITIONS END -->

@@ -26,9 +26,17 @@
       "Bash(cat /Users/nihmtaho/.claude/skills/*.md)",
       "Bash(gh run:*)",
       "Bash(gh release:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(chmod +x:*)",
+      "Bash(cargo fmt:*)",
+      "mcp__obsidian-vault__read_text_file",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ]
   },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "obsidian-vault"
+  ],
   "enabledPlugins": {
     "skill-creator@claude-plugins-official": true
   }
