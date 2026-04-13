@@ -527,61 +527,8 @@ pub fn handle_dashboard_tab(
             use crate::tui::keyboard::KeyAction;
 
             if app.todo_input_mode {
-                if app.config.vim_mode {
-                    // Route through vimltui VimEditor for real vim text editing
-                    enum VimInputResult {
-                        Continue,
-                        Submit(String),
-                        Cancel,
-                    }
-                    let result = if let Some(ref mut editor) = app.todo_vim_editor {
-                        use vimltui::{EditorAction, VimMode};
-                        // Esc in Normal mode cancels input
-                        if key.code == KeyCode::Esc && matches!(editor.mode, VimMode::Normal) {
-                            VimInputResult::Cancel
-                        // Enter in Normal mode submits the todo
-                        } else if key.code == KeyCode::Enter
-                            && matches!(editor.mode, VimMode::Normal)
-                        {
-                            let t =
-                                editor.content().lines().next().unwrap_or("").trim().to_string();
-                            VimInputResult::Submit(t)
-                        } else {
-                            match editor.handle_key(key) {
-                                EditorAction::Save | EditorAction::SaveAndClose => {
-                                    let t = editor
-                                        .content()
-                                        .lines()
-                                        .next()
-                                        .unwrap_or("")
-                                        .trim()
-                                        .to_string();
-                                    VimInputResult::Submit(t)
-                                }
-                                EditorAction::Close | EditorAction::ForceClose => {
-                                    VimInputResult::Cancel
-                                }
-                                _ => VimInputResult::Continue,
-                            }
-                        }
-                    } else {
-                        VimInputResult::Cancel
-                    };
-                    match result {
-                        VimInputResult::Submit(text) if !text.is_empty() => {
-                            crate::models::todo::insert(conn, &text)?;
-                            app.exit_todo_input_mode();
-                            app.load_todos(conn)?;
-                        }
-                        VimInputResult::Submit(_) | VimInputResult::Cancel => {
-                            app.exit_todo_input_mode();
-                        }
-                        VimInputResult::Continue => {}
-                    }
-                } else {
-                    // Non-vim input mode — delegate to simple handler
-                    crate::tui::handlers_todo::handle_todo_key(app, conn, key.code)?;
-                }
+                // Delegate to simple todo handler for text input (works in both vim and non-vim mode)
+                crate::tui::handlers_todo::handle_todo_key(app, conn, key.code)?;
             } else {
                 // Not in input mode — route through keyboard handler for vim-aware navigation
                 // Sync vim_mode from config (may differ if settings were changed at runtime)

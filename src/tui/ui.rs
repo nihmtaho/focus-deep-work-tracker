@@ -523,50 +523,6 @@ pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App, focused: bool)
     };
 
     if app.todo_input_mode {
-        // Vim mode: render VimEditor with mode indicator
-        if app.config.vim_mode {
-            if let Some(ref editor) = app.todo_vim_editor {
-                let mode_str = match editor.mode {
-                    vimltui::VimMode::Insert => "-- INSERT --",
-                    vimltui::VimMode::Replace => "-- REPLACE --",
-                    vimltui::VimMode::Visual(_) => "-- VISUAL --",
-                    _ => "-- NORMAL --",
-                };
-                let content = editor.content();
-                let line = content.lines().next().unwrap_or("");
-                let display_line = if matches!(editor.mode, vimltui::VimMode::Insert) {
-                    format!("{}█", line)
-                } else {
-                    format!("{line}  ")
-                };
-                let input_widget = Paragraph::new(vec![
-                    Line::from(Span::styled(
-                        display_line.as_str(),
-                        Style::default()
-                            .fg(Color::Cyan)
-                            .add_modifier(Modifier::BOLD),
-                    )),
-                    Line::from(Span::styled(
-                        mode_str,
-                        Style::default().fg(Color::Yellow),
-                    )),
-                    Line::from(Span::styled(
-                        "[i] insert  [Esc] normal  [Enter] save  [:w] save  [:q] cancel",
-                        Style::default().fg(Color::DarkGray),
-                    )),
-                ])
-                .block(
-                    Block::default()
-                        .title(" Add TODO (Vim) ")
-                        .borders(Borders::ALL)
-                        .border_style(border_style),
-                )
-                .wrap(Wrap { trim: true });
-                frame.render_widget(input_widget, area);
-                return;
-            }
-        }
-        // Non-vim or no editor: simple text input
         let input_display = format!("{}█", app.todo_input_buffer);
         let input_widget = Paragraph::new(vec![
             Line::from(Span::styled(
@@ -659,11 +615,7 @@ pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App, focused: bool)
 /// Render the controls/help zone displaying available hotkeys.
 pub fn render_controls_zone(frame: &mut Frame, area: Rect, app: &App) {
     let help_text = if app.todo_input_mode {
-        if app.config.vim_mode {
-            " [i] insert  [Esc] normal  [Enter] save  [:q] cancel "
-        } else {
-            " [Enter] confirm  [Esc] cancel "
-        }
+        " [Enter] confirm  [Esc] cancel "
     } else if app.pomodoro_timer.is_some() {
         " [p] pause/resume  [s] skip break  [+] extend  [q] stop Pomodoro "
     } else {

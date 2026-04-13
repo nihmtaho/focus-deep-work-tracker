@@ -178,8 +178,6 @@ pub struct App {
     pub selected_todo_idx: Option<usize>,
     pub todo_input_mode: bool,
     pub todo_input_buffer: String,
-    /// Vim editor for todo text input (Some when todo_input_mode && vim_mode).
-    pub todo_vim_editor: Option<vimltui::VimEditor>,
     // Keyboard handler for context-aware input routing
     pub keyboard_handler: KeyHandler,
     /// Currently focused dashboard panel index (0=Timer/Pomodoro, 1=TODOs, 2=Report).
@@ -223,7 +221,6 @@ impl App {
             selected_todo_idx: None,
             todo_input_mode: false,
             todo_input_buffer: String::new(),
-            todo_vim_editor: None,
             keyboard_handler: KeyHandler::new(vim_mode),
             focused_panel_idx: None,
             report_metrics: ReportMetrics::default(),
@@ -359,10 +356,6 @@ impl App {
     pub fn enter_todo_input_mode(&mut self) {
         self.todo_input_mode = true;
         self.todo_input_buffer.clear();
-        if self.config.vim_mode {
-            self.todo_vim_editor =
-                Some(vimltui::VimEditor::new("", vimltui::VimModeConfig::default()));
-        }
         self.keyboard_handler.set_context(KeyContext::Input);
     }
 
@@ -370,7 +363,6 @@ impl App {
     pub fn exit_todo_input_mode(&mut self) {
         self.todo_input_mode = false;
         self.todo_input_buffer.clear();
-        self.todo_vim_editor = None;
         self.keyboard_handler.set_context(KeyContext::Viewing);
     }
 
