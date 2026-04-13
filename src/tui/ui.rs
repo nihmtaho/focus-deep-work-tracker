@@ -53,10 +53,14 @@ Overlays
 pub fn render(frame: &mut Frame, app: &App) {
     let area = frame.area();
 
-    // Split into tab bar + content
+    // Split into: tab bar (top) + content + status bar (bottom)
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(1), Constraint::Min(0)])
+        .constraints([
+            Constraint::Length(1), // tab bar
+            Constraint::Min(0),    // content
+            Constraint::Length(1), // status bar
+        ])
         .split(area);
 
     render_tab_bar(frame, app, chunks[0]);
@@ -66,6 +70,8 @@ pub fn render(frame: &mut Frame, app: &App) {
         Tab::Log => views::log::render(frame, app, app.log_page, app.log_selected, chunks[1]),
         Tab::Settings => views::settings::render(frame, app, chunks[1]),
     }
+
+    render_status_bar(frame, app, chunks[2]);
 
     // Render overlay on top
     if app.overlay.is_active() {
@@ -628,4 +634,80 @@ pub fn render_controls_zone(frame: &mut Frame, area: Rect, app: &App) {
         .alignment(Alignment::Center);
 
     frame.render_widget(controls_widget, area);
+}
+
+/// Render the global status bar at the bottom of the screen.
+///
+/// Left side: vim mode badge (highlighted when on, dimmed when off).
+/// Right side: context-aware shortcut hints for the current state.
+fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
+    // ── Vim mode badge ────────────────────────────────────────────────────────
+    let (vim_label, vim_style) = if app.config.vim_mode {
+        (
+            " VIM ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        )
+    } else {
+        (
+            " VIM ",
+            Style::default()
+                .fg(Color::DarkGray)
+                .bg(Color::Reset),
+        )
+    };
+
+    // ── Context hints ─────────────────────────────────────────────────────────
+    let hint = match &app.active_tab {
+        Tab::Dashboard if app.todo_input_mode => {
+            "  [Enter] save todo  [Esc] cancel"
+        }
+        Tab::Dashboard if app.pomodoro_timer.is_some() => {
+            "  [p] pause/resume  [s] skip break  [+] extend break  [q] stop  [?] help"
+        }
+        Tab::Dashboard if app.config.vim_mode => {
+            "  [jk] nav  [gg/G] jump  [dd] delete  [a] add  [c] complete  [n] new session  [?] help"
+        }
+        Tab::Dashboard => {
+            "  [↑↓] nav  [Del] delete  [a] add  [c] complete  [→] start  [n] new session  [?] help"
+        }
+        Tab::Log if app.config.vim_mode => {
+            "  [jk] nav  [gg/G] jump  [←→] page  [Del] delete session  [r] rename  [?] help"
+        }
+        Tab::Log => {
+            "  [↑↓] nav  [←→] page  [Del] delete session  [r] rename  [?] help"
+        }
+        Tab::Settings => {
+            "  [↑↓] select row  [+/-] change value  [v] toggle vim  [?] help"
+        }
+    };
+
+    // ── Layout: badge on left, hints fill the rest ────────────────────────────
+    let badge_width = vim_label.len() as u16;
+    let hint_area = Rect {
+        x: area.x + badge_width,
+        y: area.y,
+        width: area.width.saturating_sub(badge_width),
+        height: area.height,
+    };
+    let badge_area = Rect {
+        x: area.x,
+        y: area.y,
+        width: badge_width.min(area.width),
+        height: area.height,
+    };
+
+    // Fill entire bar with a dark background
+    let bar_bg = Paragraph::new("").style(Style::default().bg(Color::Reset));
+    frame.render_widget(bar_bg, area);
+
+    // Vim badge
+    let badge_widget = Paragraph::new(vim_label).style(vim_style);
+    frame.render_widget(badge_widget, badge_area);
+
+    // Hints
+    let hint_widget = Paragraph::new(hint).style(Style::default().fg(Color::DarkGray));
+    frame.render_widget(hint_widget, hint_area);
 }
