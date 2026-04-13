@@ -12,16 +12,25 @@ pub fn handle_todo_key(app: &mut App, db: &Connection, key: KeyCode) -> anyhow::
             // Start adding TODO (automatically sets KeyContext::Input)
             app.enter_todo_input_mode();
         }
-        KeyCode::Char('d') if !app.todo_input_mode && app.selected_todo_idx.is_some() => {
-            // Delete selected TODO
+        // Delete selected TODO with Delete or Backspace key (viewing mode only)
+        KeyCode::Delete | KeyCode::Backspace
+            if !app.todo_input_mode && app.selected_todo_idx.is_some() =>
+        {
             if let Some(idx) = app.selected_todo_idx {
                 if idx < app.todos.len() {
                     let todo_id = app.todos[idx].id;
-                    // Check if can delete (not linked to active session)
                     if todo::can_delete(db, todo_id)? {
                         todo::delete(db, todo_id)?;
                         app.load_todos(db)?;
-                        app.selected_todo_idx = None;
+                        // Clamp selection after deletion
+                        if app.todos.is_empty() {
+                            app.selected_todo_idx = None;
+                        } else {
+                            app.selected_todo_idx =
+                                Some(idx.min(app.todos.len().saturating_sub(1)));
+                        }
+                        app.message =
+                            Some(crate::tui::app::MessageOverlay::success("Todo deleted."));
                     } else {
                         app.message = Some(crate::tui::app::MessageOverlay::error(
                             "Cannot delete TODO linked to active session",

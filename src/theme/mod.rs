@@ -118,6 +118,38 @@ pub struct ThemeColors {
     pub timer_separator: Color,
 }
 
+impl Theme {
+    /// Parse a theme name string (case-insensitive) to a Theme variant.
+    /// Returns `None` for "auto" or unknown strings.
+    pub fn from_name(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "onedark" | "one-dark" => Some(Theme::OneDark),
+            "material" => Some(Theme::Material),
+            "light" => Some(Theme::Light),
+            "dark" => Some(Theme::Dark),
+            _ => None,
+        }
+    }
+
+    /// Return the canonical name used in config.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Theme::OneDark => "onedark",
+            Theme::Material => "material",
+            Theme::Light => "light",
+            Theme::Dark => "dark",
+        }
+    }
+
+    /// Resolve the theme to use: from stored config string or auto-detect.
+    pub fn resolve(config_theme: Option<&str>) -> Self {
+        match config_theme {
+            Some(s) => Theme::from_name(s).unwrap_or_else(Theme::auto_detect),
+            None => Theme::auto_detect(),
+        }
+    }
+}
+
 impl ThemeColors {
     /// Validate that all required colors are defined
     pub fn validate(&self) -> Result<(), String> {

@@ -365,6 +365,19 @@ impl App {
         self.todo_input_buffer.clear();
         self.keyboard_handler.set_context(KeyContext::Viewing);
     }
+
+    /// Returns true when a Pomodoro session is currently active (timer is running).
+    pub fn has_active_pomodoro(&self) -> bool {
+        self.pomodoro_timer.is_some()
+    }
+
+    /// Persist the current config to disk immediately.
+    ///
+    /// Errors are returned to the caller for surfacing via `MessageOverlay::error`.
+    /// Never silently discarded.
+    pub fn save_config_now(&self) -> anyhow::Result<()> {
+        crate::config::save_config(&crate::config::config_file_path(), &self.config)
+    }
 }
 
 /// Truncate a string to `max_chars` Unicode scalar values.

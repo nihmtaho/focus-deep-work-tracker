@@ -570,15 +570,6 @@ pub fn handle_log_tab(app: &mut App, conn: &rusqlite::Connection, key: KeyEvent)
                 app.log_selected = page_len - 1;
             }
         }
-        KeyCode::Char('d') | KeyCode::Char('D') => {
-            if page_len > 0 {
-                let session = &app.log_page_entries(app.log_page)[app.log_selected];
-                app.overlay = Overlay::ConfirmDelete {
-                    session_id: session.id,
-                    session_name: session.task.clone(),
-                };
-            }
-        }
         KeyCode::Char('r') | KeyCode::Char('R') => {
             if page_len > 0 {
                 let session = &app.log_page_entries(app.log_page)[app.log_selected];
@@ -1129,18 +1120,17 @@ mod tests {
         assert!(!app.config.vim_mode);
     }
 
-    // T040: Delete flow tests
+    // T040: Delete flow tests — 'd' no longer deletes sessions in Log tab
+    // (the global handler intercepts 'd' for Dashboard navigation; sessions are read-only)
     #[test]
-    fn log_d_with_selection_opens_confirm_overlay() {
+    fn log_d_does_not_open_confirm_overlay() {
         let (conn, _f) = test_conn();
-        let id = insert_completed_session(&conn, "to delete");
+        let _id = insert_completed_session(&conn, "not deleted");
         let mut app = make_app();
         app.load_log(&conn).unwrap();
         handle_log_tab(&mut app, &conn, make_key(KeyCode::Char('d'))).unwrap();
-        assert!(matches!(
-            app.overlay,
-            Overlay::ConfirmDelete { session_id, .. } if session_id == id
-        ));
+        // No ConfirmDelete overlay — 'd' is reserved for Dashboard navigation globally
+        assert!(matches!(app.overlay, Overlay::None));
     }
 
     #[test]
