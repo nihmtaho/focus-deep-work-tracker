@@ -1,6 +1,6 @@
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState},
     Frame,
@@ -49,6 +49,8 @@ pub fn render(frame: &mut Frame, app: &App, page: usize, selected: usize, area: 
         ])
         .split(area);
 
+    let tc = get_colors_for_theme(app.config.theme.as_deref());
+
     // Title
     let total = app.log_entries.len();
     let title_text = format!(
@@ -60,14 +62,13 @@ pub fn render(frame: &mut Frame, app: &App, page: usize, selected: usize, area: 
     let title = Paragraph::new(title_text)
         .style(
             Style::default()
-                .fg(Color::Cyan)
+                .fg(tc.accent)
+                .bg(tc.background)
                 .add_modifier(Modifier::BOLD),
         )
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::NONE));
     frame.render_widget(title, chunks[0]);
-
-    let colors = get_colors_for_theme(app.config.theme.as_deref());
 
     // Table with selection highlight
     let header_cells = ["Date", "Task", "Tag", "Mode", "Duration", "Status"]
@@ -75,7 +76,8 @@ pub fn render(frame: &mut Frame, app: &App, page: usize, selected: usize, area: 
         .map(|h| {
             Cell::from(*h).style(
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(tc.warning)
+                    .bg(tc.background)
                     .add_modifier(Modifier::BOLD),
             )
         });
@@ -86,12 +88,13 @@ pub fn render(frame: &mut Frame, app: &App, page: usize, selected: usize, area: 
     if entries.is_empty() {
         let empty = Paragraph::new(Line::from(Span::styled(
             "  (empty) — no completed sessions.",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(tc.panel_border),
         )))
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Blue))
+                .border_style(Style::default().fg(tc.panel_border))
+                .style(Style::default().bg(tc.background))
                 .title(" Completed Sessions "),
         );
         frame.render_widget(empty, chunks[1]);
@@ -103,7 +106,6 @@ pub fn render(frame: &mut Frame, app: &App, page: usize, selected: usize, area: 
             .enumerate()
             .map(|(i, s)| {
                 let date = s.start_time.format("%Y-%m-%d %H:%M").to_string();
-                // No truncation — show full task name; table wraps automatically
                 let task = s.task.clone();
                 let tag = s.tag.as_deref().unwrap_or("—").to_string();
                 let mode_str = s.mode.clone();
@@ -113,24 +115,24 @@ pub fn render(frame: &mut Frame, app: &App, page: usize, selected: usize, area: 
                     .unwrap_or_else(|| "—".to_string());
                 let status = format_status(s.end_time.is_some()).to_string();
 
-                let tag_cell = Cell::from(tag).style(Style::default().fg(colors.tag_color));
-                let task_cell = Cell::from(task).style(Style::default().fg(colors.session_title));
+                let tag_cell = Cell::from(tag).style(Style::default().fg(tc.tag_color));
+                let task_cell = Cell::from(task).style(Style::default().fg(tc.session_title));
                 let status_style = if s.end_time.is_none() {
-                    Style::default().fg(colors.warning)
+                    Style::default().fg(tc.warning)
                 } else {
-                    Style::default().fg(colors.success)
+                    Style::default().fg(tc.success)
                 };
 
                 let row = Row::new(vec![
-                    Cell::from(date),
+                    Cell::from(date).style(Style::default().fg(tc.foreground)),
                     task_cell,
                     tag_cell,
-                    Cell::from(mode_str),
-                    Cell::from(duration),
+                    Cell::from(mode_str).style(Style::default().fg(tc.foreground)),
+                    Cell::from(duration).style(Style::default().fg(tc.foreground)),
                     Cell::from(status).style(status_style),
                 ]);
                 if i == selected {
-                    row.style(Style::default().add_modifier(Modifier::REVERSED))
+                    row.style(Style::default().bg(tc.panel_border).fg(tc.background).add_modifier(Modifier::BOLD))
                 } else {
                     row
                 }
@@ -145,7 +147,8 @@ pub fn render(frame: &mut Frame, app: &App, page: usize, selected: usize, area: 
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Blue))
+                    .border_style(Style::default().fg(tc.panel_border))
+                    .style(Style::default().bg(tc.background))
                     .title(" Completed Sessions "),
             )
             .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED));
@@ -162,14 +165,15 @@ pub fn render(frame: &mut Frame, app: &App, page: usize, selected: usize, area: 
     };
     let pagination = Paragraph::new(Line::from(vec![Span::styled(
         page_info,
-        Style::default().fg(Color::DarkGray),
+        Style::default().fg(tc.panel_border),
     )]))
+    .style(Style::default().bg(tc.background))
     .alignment(Alignment::Center);
     frame.render_widget(pagination, chunks[2]);
 
     // Help
     let help = Paragraph::new(" [↑↓] Select  [←→] Page  [D] Delete  [R] Rename  [?] Help ")
-        .style(Style::default().fg(Color::DarkGray))
+        .style(Style::default().fg(tc.panel_border).bg(tc.background))
         .alignment(Alignment::Center);
     frame.render_widget(help, chunks[3]);
 

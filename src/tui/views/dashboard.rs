@@ -85,6 +85,7 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
 /// which handles the vertically-centered clock, progress bar, and info panel.
 /// A compact stats row (cycles + elapsed) is shown in the bottom border footer.
 pub fn render_full_pomodoro_panel(frame: &mut Frame, app: &App, area: Rect) {
+    let tc = crate::tui::themes::get_colors_for_theme(app.config.theme.as_deref());
     // Build the title with cycle count when a timer is active
     let title = if let Some(ref timer) = app.pomodoro_timer {
         let elapsed = crate::pomodoro::timer::format_secs(timer.total_elapsed_secs());
@@ -101,9 +102,10 @@ pub fn render_full_pomodoro_panel(frame: &mut Frame, app: &App, area: Rect) {
         .borders(Borders::ALL)
         .border_style(
             Style::default()
-                .fg(Color::Cyan)
+                .fg(tc.panel_focus_border)
                 .add_modifier(Modifier::BOLD),
-        );
+        )
+        .style(Style::default().bg(tc.background));
     let inner = outer.inner(area);
     frame.render_widget(outer, area);
 
@@ -177,6 +179,7 @@ pub fn render_message_overlay_pub(frame: &mut Frame, app: &App, msg: &MessageOve
 
 fn render_message_overlay(frame: &mut Frame, app: &App, msg: &MessageOverlay) {
     use ratatui::layout::Rect;
+    let tc = crate::tui::themes::get_colors_for_theme(app.config.theme.as_deref());
 
     let area = frame.area();
     let msg_width = (msg.text.len() as u16 + 4).min(area.width.saturating_sub(4));
@@ -201,9 +204,9 @@ fn render_message_overlay(frame: &mut Frame, app: &App, msg: &MessageOverlay) {
         )
     } else {
         match msg.kind {
-            MessageKind::Success => (Color::Green, " OK "),
-            MessageKind::Warning => (Color::Yellow, " WARN "),
-            MessageKind::Error => (Color::Red, " ERROR "),
+            MessageKind::Success => (tc.success, " OK "),
+            MessageKind::Warning => (tc.warning, " WARN "),
+            MessageKind::Error => (tc.error, " ERROR "),
         }
     };
 
@@ -212,7 +215,8 @@ fn render_message_overlay(frame: &mut Frame, app: &App, msg: &MessageOverlay) {
             Block::default()
                 .title(title)
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(fg)),
+                .border_style(Style::default().fg(fg))
+                .style(Style::default().bg(tc.background)),
         )
         .style(Style::default().fg(fg));
     frame.render_widget(overlay, overlay_area);
