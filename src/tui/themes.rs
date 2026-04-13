@@ -26,6 +26,12 @@ pub fn get_current_colors() -> ThemeColors {
     Theme::auto_detect().colors()
 }
 
+/// Get theme colors respecting a user-configured theme name.
+/// Falls back to auto-detection if theme_name is None or unknown.
+pub fn get_colors_for_theme(theme_name: Option<&str>) -> ThemeColors {
+    load_theme(theme_name).colors()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -57,13 +63,19 @@ mod tests {
     #[test]
     fn test_load_theme_auto_detection() {
         let theme = load_theme(Some("auto"));
-        assert!(matches!(theme, Theme::OneDark | Theme::Material | Theme::Light | Theme::Dark));
+        assert!(matches!(
+            theme,
+            Theme::OneDark | Theme::Material | Theme::Light | Theme::Dark
+        ));
     }
 
     #[test]
     fn test_load_theme_invalid_fallback_to_auto() {
         let theme = load_theme(Some("invalid_theme"));
-        assert!(matches!(theme, Theme::OneDark | Theme::Material | Theme::Light | Theme::Dark));
+        assert!(matches!(
+            theme,
+            Theme::OneDark | Theme::Material | Theme::Light | Theme::Dark
+        ));
     }
 
     #[test]

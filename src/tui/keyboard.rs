@@ -146,21 +146,30 @@ mod tests {
     fn test_letter_shortcut_d_navigates_to_dashboard() {
         let handler = KeyHandler::new(false);
         let event = create_key_event(KeyCode::Char('d'));
-        assert_eq!(handler.handle_key(event), KeyAction::NavigateTab(TabTarget::Dashboard));
+        assert_eq!(
+            handler.handle_key(event),
+            KeyAction::NavigateTab(TabTarget::Dashboard)
+        );
     }
 
     #[test]
     fn test_letter_shortcut_s_navigates_to_sessions() {
         let handler = KeyHandler::new(false);
         let event = create_key_event(KeyCode::Char('s'));
-        assert_eq!(handler.handle_key(event), KeyAction::NavigateTab(TabTarget::Sessions));
+        assert_eq!(
+            handler.handle_key(event),
+            KeyAction::NavigateTab(TabTarget::Sessions)
+        );
     }
 
     #[test]
     fn test_letter_shortcut_t_navigates_to_todos() {
         let handler = KeyHandler::new(false);
         let event = create_key_event(KeyCode::Char('t'));
-        assert_eq!(handler.handle_key(event), KeyAction::NavigateTab(TabTarget::TODOs));
+        assert_eq!(
+            handler.handle_key(event),
+            KeyAction::NavigateTab(TabTarget::TODOs)
+        );
     }
 
     #[test]
@@ -177,7 +186,7 @@ mod tests {
         handler.set_context(KeyContext::Input);
         let event = create_key_event(KeyCode::Char('d'));
         match handler.handle_key(event) {
-            KeyAction::InputKeypress(_) => {},
+            KeyAction::InputKeypress(_) => {}
             _ => panic!("Expected InputKeypress in input mode"),
         }
     }
@@ -186,20 +195,44 @@ mod tests {
     fn test_vim_mode_hjkl_navigation() {
         let handler = KeyHandler::new(true);
 
-        assert_eq!(handler.handle_key(create_key_event(KeyCode::Char('h'))), KeyAction::FocusLeft);
-        assert_eq!(handler.handle_key(create_key_event(KeyCode::Char('j'))), KeyAction::FocusDown);
-        assert_eq!(handler.handle_key(create_key_event(KeyCode::Char('k'))), KeyAction::FocusUp);
-        assert_eq!(handler.handle_key(create_key_event(KeyCode::Char('l'))), KeyAction::FocusRight);
+        assert_eq!(
+            handler.handle_key(create_key_event(KeyCode::Char('h'))),
+            KeyAction::FocusLeft
+        );
+        assert_eq!(
+            handler.handle_key(create_key_event(KeyCode::Char('j'))),
+            KeyAction::FocusDown
+        );
+        assert_eq!(
+            handler.handle_key(create_key_event(KeyCode::Char('k'))),
+            KeyAction::FocusUp
+        );
+        assert_eq!(
+            handler.handle_key(create_key_event(KeyCode::Char('l'))),
+            KeyAction::FocusRight
+        );
     }
 
     #[test]
     fn test_arrow_keys_when_vim_mode_disabled() {
         let handler = KeyHandler::new(false);
 
-        assert_eq!(handler.handle_key(create_key_event(KeyCode::Left)), KeyAction::FocusLeft);
-        assert_eq!(handler.handle_key(create_key_event(KeyCode::Right)), KeyAction::FocusRight);
-        assert_eq!(handler.handle_key(create_key_event(KeyCode::Up)), KeyAction::FocusUp);
-        assert_eq!(handler.handle_key(create_key_event(KeyCode::Down)), KeyAction::FocusDown);
+        assert_eq!(
+            handler.handle_key(create_key_event(KeyCode::Left)),
+            KeyAction::FocusLeft
+        );
+        assert_eq!(
+            handler.handle_key(create_key_event(KeyCode::Right)),
+            KeyAction::FocusRight
+        );
+        assert_eq!(
+            handler.handle_key(create_key_event(KeyCode::Up)),
+            KeyAction::FocusUp
+        );
+        assert_eq!(
+            handler.handle_key(create_key_event(KeyCode::Down)),
+            KeyAction::FocusDown
+        );
     }
 
     #[test]
@@ -218,23 +251,57 @@ mod tests {
         // Test letter shortcuts disabled
         let d_event = create_key_event(KeyCode::Char('d'));
         match handler.handle_key(d_event) {
-            KeyAction::InputKeypress(_) => {},
+            KeyAction::InputKeypress(_) => {}
             _ => panic!("Expected InputKeypress for 'd' in input mode"),
         }
 
         // Test number shortcuts disabled
         let one_event = create_key_event(KeyCode::Char('1'));
         match handler.handle_key(one_event) {
-            KeyAction::InputKeypress(_) => {},
+            KeyAction::InputKeypress(_) => {}
             _ => panic!("Expected InputKeypress for '1' in input mode"),
         }
 
         // Test arrow keys disabled
         let up_event = create_key_event(KeyCode::Up);
         match handler.handle_key(up_event) {
-            KeyAction::InputKeypress(_) => {},
+            KeyAction::InputKeypress(_) => {}
             _ => panic!("Expected InputKeypress for Up in input mode"),
         }
+    }
+
+    #[test]
+    fn test_number_shortcuts_map_to_focus_panel() {
+        let handler = KeyHandler::new(false);
+        assert_eq!(
+            handler.handle_key(create_key_event(KeyCode::Char('1'))),
+            KeyAction::FocusPanel(0)
+        );
+        assert_eq!(
+            handler.handle_key(create_key_event(KeyCode::Char('2'))),
+            KeyAction::FocusPanel(1)
+        );
+        assert_eq!(
+            handler.handle_key(create_key_event(KeyCode::Char('3'))),
+            KeyAction::FocusPanel(2)
+        );
+    }
+
+    #[test]
+    fn test_out_of_range_number_ignored() {
+        let handler = KeyHandler::new(false);
+        assert_eq!(
+            handler.handle_key(create_key_event(KeyCode::Char('4'))),
+            KeyAction::None
+        );
+        assert_eq!(
+            handler.handle_key(create_key_event(KeyCode::Char('5'))),
+            KeyAction::None
+        );
+        assert_eq!(
+            handler.handle_key(create_key_event(KeyCode::Char('9'))),
+            KeyAction::None
+        );
     }
 
     #[test]

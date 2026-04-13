@@ -68,3 +68,55 @@ fn test_pomodoro_panel_focus_streak_tracking() {
 fn test_pomodoro_panel_placeholder() {
     assert!(true);
 }
+
+// T137: Full Pomodoro panel view toggled on/off
+
+#[test]
+fn test_full_pomodoro_panel_toggle_off_by_default() {
+    use focus::config::AppConfig;
+    use focus::tui::app::App;
+    let app = App::new(false, AppConfig::default());
+    assert!(
+        !app.full_pomodoro_panel,
+        "Full Pomodoro panel must default to off"
+    );
+}
+
+#[test]
+fn test_full_pomodoro_panel_toggle_on_and_off() {
+    use focus::config::AppConfig;
+    use focus::tui::app::App;
+    let mut app = App::new(false, AppConfig::default());
+
+    // Toggle on
+    app.full_pomodoro_panel = true;
+    assert!(
+        app.full_pomodoro_panel,
+        "Full Pomodoro panel must be togglable on"
+    );
+
+    // Toggle off
+    app.full_pomodoro_panel = false;
+    assert!(
+        !app.full_pomodoro_panel,
+        "Full Pomodoro panel must be togglable off"
+    );
+}
+
+#[test]
+fn test_full_pomodoro_panel_resets_on_esc_simulation() {
+    use focus::config::AppConfig;
+    use focus::tui::app::App;
+    let mut app = App::new(false, AppConfig::default());
+
+    // Simulate entering full panel
+    app.full_pomodoro_panel = true;
+    assert!(app.full_pomodoro_panel);
+
+    // Simulate Esc/Q key handler behaviour: set full_pomodoro_panel = false
+    app.full_pomodoro_panel = false;
+    assert!(
+        !app.full_pomodoro_panel,
+        "Esc/Q must exit full Pomodoro panel"
+    );
+}

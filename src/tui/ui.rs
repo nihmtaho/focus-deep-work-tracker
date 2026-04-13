@@ -7,15 +7,14 @@ use ratatui::{
 };
 use std::time::Duration;
 
-use crate::tui::app::{App, MessageKind, Overlay, Tab};
-use crate::tui::views;
-use crate::tui::timer_display::TimerDisplay;
-use crate::tui::report::ReportMetrics;
 use crate::pomodoro::stats::PomodoroPanelState;
+use crate::tui::app::{App, MessageKind, Overlay, Tab};
+use crate::tui::timer_display::TimerDisplay;
+use crate::tui::views;
 
 const HELP_TEXT: &str = "\
 Global
-  1-5       Switch tab
+  d/l/s     Dashboard/Log/Settings
   Tab       Next tab
   ?         Show this help
   q         Quit
@@ -23,13 +22,17 @@ Global
 
 Dashboard
   n         New session (choose mode)
-  s/Enter   Stop active session
+  e/Enter   Stop active session
+  1/2/3     Focus panel (Timer · TODOs · Report)
+  p         Pause/Resume Pomodoro
+  + / S     Extend / Skip break
+  q         Stop Pomodoro (when active)
 
-Pomodoro
-  P         Pause / Resume
-  S         Skip break
-  +         Extend phase by 5 min
-  Q         Stop timer
+TODOs (Dashboard)
+  a         Add TODO
+  c         Complete selected
+  →         Start session with selected TODO
+  ↑/↓       Navigate
 
 Log
   ↑/↓       Select row
@@ -37,9 +40,6 @@ Log
   d         Delete selected session
   r         Rename selected session
   j/k/g/G   Vim navigation (when enabled)
-
-Report
-  h/l       Change time window
 
 Settings
   v         Toggle vim mode
@@ -64,26 +64,7 @@ pub fn render(frame: &mut Frame, app: &App) {
     match &app.active_tab {
         Tab::Dashboard => views::dashboard::render(frame, app, chunks[1]),
         Tab::Log => views::log::render(frame, app, app.log_page, app.log_selected, chunks[1]),
-        Tab::Report => views::report::render(
-            frame,
-            app,
-            &app.report_window,
-            app.report_selected_window,
-            chunks[1],
-        ),
         Tab::Settings => views::settings::render(frame, app, chunks[1]),
-        Tab::Pomodoro => {
-            if let Some(ref timer) = app.pomodoro_timer {
-                views::pomodoro::render(frame, timer, app.no_color, chunks[1]);
-            } else {
-                let hint = Paragraph::new(
-                    "No Pomodoro session active. Press [N] on Dashboard to start one.",
-                )
-                .alignment(Alignment::Center)
-                .style(Style::default().fg(Color::DarkGray));
-                frame.render_widget(hint, chunks[1]);
-            }
-        }
     }
 
     // Render overlay on top
@@ -101,11 +82,9 @@ pub fn render(frame: &mut Frame, app: &App) {
 
 fn render_tab_bar(frame: &mut Frame, app: &App, area: Rect) {
     let tabs = [
-        (Tab::Dashboard, "[1]Dashboard"),
-        (Tab::Log, "[2]Log"),
-        (Tab::Report, "[3]Report"),
-        (Tab::Settings, "[4]Settings"),
-        (Tab::Pomodoro, "[5]Pomodoro"),
+        (Tab::Dashboard, "[d]Dashboard"),
+        (Tab::Log, "[l]Log"),
+        (Tab::Settings, "[s]Settings"),
     ];
 
     let spans: Vec<Span> = tabs
@@ -365,7 +344,7 @@ fn render_message_overlay(
 
 /// Render the Pomodoro panel when idle, showing historical stats and start button.
 /// Displays total cycles, cumulative duration, focus streak, and last completion time.
-pub fn render_pomodoro_panel(frame: &mut Frame, area: Rect, _app: &App) {
+pub fn render_pomodoro_panel(frame: &mut Frame, area: Rect, _app: &App, focused: bool) {
     // For now, create an idle panel state as placeholder
     // TODO: Load actual stats from database in Phase 6 (T060-T061)
     let panel_state = PomodoroPanelState::idle();
@@ -375,7 +354,9 @@ pub fn render_pomodoro_panel(frame: &mut Frame, area: Rect, _app: &App) {
         vec![
             Line::from(Span::styled(
                 format!("{} pomodoros today", panel_state.total_cycles_today),
-                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
             )),
             Line::from(Span::raw("")),
             Line::from(Span::styled(
@@ -408,12 +389,20 @@ pub fn render_pomodoro_panel(frame: &mut Frame, area: Rect, _app: &App) {
         ]
     };
 
+    let border_style = if focused {
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(Color::Cyan)
+    };
+
     let widget = Paragraph::new(content)
         .block(
             Block::default()
-                .title(" Pomodoro ")
+                .title(" [1] Pomodoro ")
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(border_style),
         )
         .alignment(Alignment::Center)
         .wrap(Wrap { trim: true });
@@ -423,15 +412,15 @@ pub fn render_pomodoro_panel(frame: &mut Frame, area: Rect, _app: &App) {
 
 /// Render the Report panel showing session analytics and productivity metrics.
 /// Displays: session counts, total duration, completion rate, focus streak, and productivity score.
-pub fn render_report_panel(frame: &mut Frame, area: Rect, _app: &App) {
-    // TODO: Load actual metrics from database (Phase 9 T095-T099)
-    // For now, create placeholder metrics
-    let metrics = ReportMetrics::default();
+pub fn render_report_panel(frame: &mut Frame, area: Rect, app: &App, focused: bool) {
+    let metrics = &app.report_metrics;
 
     let content = vec![
         Line::from(Span::styled(
             "Today's Report",
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
         )),
         Line::from(Span::raw("")),
         Line::from(vec![
@@ -456,7 +445,11 @@ pub fn render_report_panel(frame: &mut Frame, area: Rect, _app: &App) {
         )),
         Line::from(Span::raw("")),
         Line::from(Span::styled(
-            format!("Week: {} sessions • {}", metrics.count_week, metrics.format_duration_week()),
+            format!(
+                "Week: {} sessions • {}",
+                metrics.count_week,
+                metrics.format_duration_week()
+            ),
             Style::default().fg(Color::DarkGray),
         )),
         Line::from(Span::styled(
@@ -465,12 +458,20 @@ pub fn render_report_panel(frame: &mut Frame, area: Rect, _app: &App) {
         )),
     ];
 
+    let border_style = if focused {
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(Color::Cyan)
+    };
+
     let widget = Paragraph::new(content)
         .block(
             Block::default()
-                .title(" Report ")
+                .title(" [3] Report ")
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(border_style),
         )
         .wrap(Wrap { trim: true });
 
@@ -480,7 +481,7 @@ pub fn render_report_panel(frame: &mut Frame, area: Rect, _app: &App) {
 /// Render the timer zone displaying active session countdown in HH:MM:SS format.
 /// Uses TimerDisplay component for consistent flip-clock formatting.
 /// Takes a significant portion of the layout (40% width) for visual prominence.
-pub fn render_timer_zone(frame: &mut Frame, area: Rect, app: &App) {
+pub fn render_timer_zone(frame: &mut Frame, area: Rect, app: &App, focused: bool) {
     let timer_text = if let Some(session) = &app.active_session {
         let elapsed = session.elapsed();
         let duration = Duration::from_secs(elapsed.num_seconds() as u64);
@@ -493,9 +494,15 @@ pub fn render_timer_zone(frame: &mut Frame, area: Rect, app: &App) {
     let timer_widget = Paragraph::new(timer_text)
         .block(
             Block::default()
-                .title(" Timer ")
+                .title(" [1] Timer ")
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(if focused {
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(Color::Cyan)
+                }),
         )
         .style(Style::default().add_modifier(Modifier::BOLD))
         .alignment(Alignment::Center);
@@ -505,8 +512,16 @@ pub fn render_timer_zone(frame: &mut Frame, area: Rect, app: &App) {
 
 /// Render the TODO list zone displaying all todos with visual distinction
 /// for active vs completed items, using theme colors for each state.
-pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App) {
+pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App, focused: bool) {
     // If in TODO input mode, render input field instead
+    let border_style = if focused {
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(Color::Cyan)
+    };
+
     if app.todo_input_mode {
         let input_display = format!("{}█", app.todo_input_buffer);
         let input_widget = Paragraph::new(vec![
@@ -525,7 +540,7 @@ pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App) {
             Block::default()
                 .title(" Add TODO ")
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(border_style),
         )
         .wrap(Wrap { trim: true });
 
@@ -537,9 +552,9 @@ pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App) {
         let empty_text = Paragraph::new("No TODOs. Press [a] to add one.")
             .block(
                 Block::default()
-                    .title(" TODOs ")
+                    .title(" [2] TODOs ")
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Cyan)),
+                    .border_style(border_style),
             )
             .style(Style::default().fg(Color::DarkGray))
             .alignment(Alignment::Center);
@@ -548,8 +563,7 @@ pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App) {
     }
 
     // Get current theme colors for TODO rendering
-    let theme = crate::theme::Theme::auto_detect();
-    let theme_colors = theme.colors();
+    let theme_colors = crate::tui::themes::get_colors_for_theme(app.config.theme.as_deref());
 
     let todos_display: Vec<Line> = app
         .todos
@@ -589,9 +603,9 @@ pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App) {
     let todo_widget = Paragraph::new(todos_display)
         .block(
             Block::default()
-                .title(" TODOs ")
+                .title(" [2] TODOs ")
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Cyan)),
+                .border_style(border_style),
         )
         .wrap(Wrap { trim: true });
 
@@ -602,8 +616,10 @@ pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App) {
 pub fn render_controls_zone(frame: &mut Frame, area: Rect, app: &App) {
     let help_text = if app.todo_input_mode {
         " [Enter] confirm  [Esc] cancel "
+    } else if app.pomodoro_timer.is_some() {
+        " [p] pause/resume  [s] skip break  [+] extend  [q] stop Pomodoro "
     } else {
-        " [a] add  [d] delete  [c] complete  [s/→] start  [↑↓] navigate "
+        " [a] add  [c] complete  [→] start session  [↑↓] navigate  [n] new session "
     };
 
     let controls_widget = Paragraph::new(help_text)

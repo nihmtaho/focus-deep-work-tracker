@@ -5,7 +5,8 @@ use crate::models::session::Session;
 use crate::models::todo::Todo;
 use crate::pomodoro::config::PomodoroConfig;
 use crate::pomodoro::timer::PomodoroTimer;
-use crate::tui::keyboard::{KeyHandler, KeyContext};
+use crate::tui::keyboard::{KeyContext, KeyHandler};
+use crate::tui::report::ReportMetrics;
 
 // ── Time window ────────────────────────────────────────────────────────────────
 
@@ -72,9 +73,7 @@ impl MessageOverlay {
 pub enum Tab {
     Dashboard,
     Log,
-    Report,
     Settings,
-    Pomodoro,
 }
 
 // ── PromptAction ───────────────────────────────────────────────────────────────
@@ -152,7 +151,7 @@ pub struct App {
     pub overlay: Overlay,
     pub log_selected: usize,
     pub config: AppConfig,
-    // Report state
+    // Report state (legacy tab window — kept for backward compat with load_report)
     pub report_window: TimeWindow,
     pub report_selected_window: usize,
     // Log pagination (page stored in App now)
@@ -181,6 +180,15 @@ pub struct App {
     pub todo_input_buffer: String,
     // Keyboard handler for context-aware input routing
     pub keyboard_handler: KeyHandler,
+    /// Currently focused dashboard panel index (0=Timer/Pomodoro, 1=TODOs, 2=Report).
+    /// None means no panel is focused.
+    pub focused_panel_idx: Option<usize>,
+    // Report panel metrics shown in Dashboard (replaces Today's Summary)
+    pub report_metrics: ReportMetrics,
+    /// Time the report_metrics were last computed (for 5-second cache).
+    pub report_metrics_cached_at: Option<Instant>,
+    /// When true, the dashboard shows an expanded full-screen Pomodoro panel.
+    pub full_pomodoro_panel: bool,
 }
 
 pub const LOG_PAGE_SIZE: usize = 10;
@@ -214,7 +222,35 @@ impl App {
             todo_input_mode: false,
             todo_input_buffer: String::new(),
             keyboard_handler: KeyHandler::new(vim_mode),
+            focused_panel_idx: None,
+            report_metrics: ReportMetrics::default(),
+            report_metrics_cached_at: None,
+            full_pomodoro_panel: false,
         }
+    }
+
+    /// Refresh Report panel metrics from the database, with a 5-second cache.
+    ///
+    /// If the cache is still fresh (< 5 s old) the stored metrics are returned
+    /// without hitting the database.  Call `invalidate_report_metrics_cache()`
+    /// to force an immediate refresh (e.g. after a session ends).
+    pub fn load_report_metrics(&mut self, conn: &rusqlite::Connection) -> anyhow::Result<()> {
+        const CACHE_TTL_SECS: u64 = 5;
+        let stale = self
+            .report_metrics_cached_at
+            .map(|t| t.elapsed().as_secs() >= CACHE_TTL_SECS)
+            .unwrap_or(true);
+
+        if stale {
+            self.report_metrics = ReportMetrics::compute(conn)?;
+            self.report_metrics_cached_at = Some(Instant::now());
+        }
+        Ok(())
+    }
+
+    /// Force the next `load_report_metrics` call to re-query the database.
+    pub fn invalidate_report_metrics_cache(&mut self) {
+        self.report_metrics_cached_at = None;
     }
 
     /// Load/refresh dashboard data from the database.
@@ -226,6 +262,7 @@ impl App {
         self.today_summary = session_store::aggregate_by_tag(conn, today_start())?;
         self.today_sessions = session_store::list_completed_since(conn, today_start())?;
         self.load_todos(conn)?;
+        self.load_report_metrics(conn)?;
         Ok(())
     }
 
@@ -294,6 +331,7 @@ impl App {
                 self.message = None;
             }
         }
+        self.load_report_metrics(conn)?;
         Ok(())
     }
 

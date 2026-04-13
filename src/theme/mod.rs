@@ -3,16 +3,17 @@
 //! Provides a themeable color system for the CLI with support for multiple
 //! predefined themes (onedark, material, light, dark) and OS auto-detection.
 
-pub mod onedark;
-pub mod material;
-pub mod light;
 pub mod dark;
+pub mod light;
+pub mod material;
+pub mod onedark;
 
 use ratatui::style::Color;
 
 /// Theme enumeration
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Theme {
+    #[default]
     OneDark,
     Material,
     Light,
@@ -30,15 +31,18 @@ impl Theme {
         {
             // Try to detect macOS dark mode
             if let Ok(output) = std::process::Command::new("defaults")
-                .args(&["read", "-g", "AppleInterfaceStyle"])
+                .args(["read", "-g", "AppleInterfaceStyle"])
                 .output()
             {
-                if String::from_utf8_lossy(&output.stdout).to_lowercase().contains("dark") {
+                if String::from_utf8_lossy(&output.stdout)
+                    .to_lowercase()
+                    .contains("dark")
+                {
                     return Theme::Dark;
                 }
             }
             // Default to light on macOS if not in dark mode
-            return Theme::Light;
+            Theme::Light
         }
 
         #[cfg(target_os = "linux")]
@@ -74,12 +78,6 @@ impl Theme {
             Theme::Light => light::colors(),
             Theme::Dark => dark::colors(),
         }
-    }
-}
-
-impl Default for Theme {
-    fn default() -> Self {
-        Theme::OneDark
     }
 }
 
@@ -135,7 +133,10 @@ mod tests {
     #[test]
     fn test_theme_auto_detect_returns_valid_theme() {
         let theme = Theme::auto_detect();
-        assert!(matches!(theme, Theme::OneDark | Theme::Material | Theme::Light | Theme::Dark));
+        assert!(matches!(
+            theme,
+            Theme::OneDark | Theme::Material | Theme::Light | Theme::Dark
+        ));
     }
 
     #[test]

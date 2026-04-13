@@ -1,9 +1,9 @@
+use crate::theme::ThemeColors;
 use anyhow::Result;
 use chrono::Utc;
+use ratatui::style::Color;
 use rusqlite::Connection;
 use serde::Serialize;
-use ratatui::style::Color;
-use crate::theme::ThemeColors;
 
 /// Represents a user-defined task that can be linked to sessions.
 #[derive(Debug, Clone, Serialize)]

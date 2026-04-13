@@ -3,8 +3,8 @@
 //! Tests the flip-clock timer display rendering in various formats,
 //! including validation with theme colors.
 
-use focus::tui::timer_display::TimerDisplay;
 use focus::theme::Theme;
+use focus::tui::timer_display::TimerDisplay;
 use std::time::Duration;
 
 #[test]
