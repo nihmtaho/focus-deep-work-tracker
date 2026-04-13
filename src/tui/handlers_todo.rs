@@ -3,25 +3,28 @@ use crossterm::event::KeyCode;
 use rusqlite::Connection;
 
 use crate::models::todo;
-use crate::tui::app::App;
+use crate::tui::app::{App, PromptAction};
 
-/// Handle TODO-related keyboard input.
+/// Handle TODO-related keyboard input (viewing mode only — input is handled via Overlay::Prompt).
 pub fn handle_todo_key(app: &mut App, db: &Connection, key: KeyCode) -> anyhow::Result<()> {
     match key {
-        KeyCode::Char('a') if !app.todo_input_mode => {
-            // Start adding TODO (automatically sets KeyContext::Input)
-            app.enter_todo_input_mode();
+        KeyCode::Char('a') => {
+            app.open_prompt("Add TODO:", "", PromptAction::AddTodo);
         }
-        KeyCode::Char('d') if !app.todo_input_mode && app.selected_todo_idx.is_some() => {
-            // Delete selected TODO
+        KeyCode::Delete | KeyCode::Backspace if app.selected_todo_idx.is_some() => {
             if let Some(idx) = app.selected_todo_idx {
                 if idx < app.todos.len() {
                     let todo_id = app.todos[idx].id;
-                    // Check if can delete (not linked to active session)
                     if todo::can_delete(db, todo_id)? {
                         todo::delete(db, todo_id)?;
                         app.load_todos(db)?;
-                        app.selected_todo_idx = None;
+                        app.selected_todo_idx = if app.todos.is_empty() {
+                            None
+                        } else {
+                            Some(idx.min(app.todos.len().saturating_sub(1)))
+                        };
+                        app.message =
+                            Some(crate::tui::app::MessageOverlay::success("Todo deleted."));
                     } else {
                         app.message = Some(crate::tui::app::MessageOverlay::error(
                             "Cannot delete TODO linked to active session",
@@ -30,8 +33,7 @@ pub fn handle_todo_key(app: &mut App, db: &Connection, key: KeyCode) -> anyhow::
                 }
             }
         }
-        KeyCode::Char('c') if !app.todo_input_mode && app.selected_todo_idx.is_some() => {
-            // Mark selected TODO as complete
+        KeyCode::Char('c') if app.selected_todo_idx.is_some() => {
             if let Some(idx) = app.selected_todo_idx {
                 if idx < app.todos.len() {
                     let todo_id = app.todos[idx].id;
@@ -40,56 +42,28 @@ pub fn handle_todo_key(app: &mut App, db: &Connection, key: KeyCode) -> anyhow::
                 }
             }
         }
-        KeyCode::Char('s') if !app.todo_input_mode => {
-            // Open mode selector to choose Freeform or Pomodoro
-            // The selected_todo_idx will be used when creating the session
+        KeyCode::Char('s') => {
             app.overlay = crate::tui::app::Overlay::ModeSelector { cursor: 0 };
         }
-        KeyCode::Right if !app.todo_input_mode && app.selected_todo_idx.is_some() => {
-            // Confirm TODO selection and open mode selector (alternative to 's' key)
-            // The selected_todo_idx will be used when creating the session
+        KeyCode::Right if app.selected_todo_idx.is_some() => {
             app.overlay = crate::tui::app::Overlay::ModeSelector { cursor: 0 };
         }
-        KeyCode::Enter if app.todo_input_mode => {
-            // Confirm TODO add (automatically sets KeyContext::Viewing)
-            if !app.todo_input_buffer.is_empty() {
-                todo::insert(db, &app.todo_input_buffer)?;
-                app.exit_todo_input_mode();
-                app.load_todos(db)?;
-            }
-        }
-        KeyCode::Esc => {
-            // Cancel TODO input and return to viewing mode (automatically sets KeyContext::Viewing)
-            app.exit_todo_input_mode();
-        }
-        KeyCode::Up if !app.todo_input_mode && !app.todos.is_empty() => {
-            // Navigate up in TODO list
-            match app.selected_todo_idx {
-                None => app.selected_todo_idx = Some(0),
-                Some(idx) if idx > 0 => app.selected_todo_idx = Some(idx - 1),
-                _ => {} // Stay at top
-            }
-        }
-        KeyCode::Down if !app.todo_input_mode && !app.todos.is_empty() => {
-            // Navigate down in TODO list
+        KeyCode::Up if !app.todos.is_empty() => match app.selected_todo_idx {
+            None => app.selected_todo_idx = Some(0),
+            Some(i) if i > 0 => app.selected_todo_idx = Some(i - 1),
+            _ => {}
+        },
+        KeyCode::Down if !app.todos.is_empty() => {
             let len = app.todos.len();
             match app.selected_todo_idx {
                 None => app.selected_todo_idx = Some(0),
-                Some(idx) if idx < len - 1 => app.selected_todo_idx = Some(idx + 1),
-                _ => {} // Stay at bottom
+                Some(i) if i + 1 < len => app.selected_todo_idx = Some(i + 1),
+                _ => {}
             }
-        }
-        KeyCode::Char(c) if app.todo_input_mode => {
-            // Accumulate characters for TODO input
-            if app.todo_input_buffer.len() < 256 {
-                app.todo_input_buffer.push(c);
-            }
-        }
-        KeyCode::Backspace if app.todo_input_mode => {
-            app.todo_input_buffer.pop();
         }
         _ => {}
     }
 
     Ok(())
 }
+

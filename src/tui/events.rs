@@ -36,16 +36,12 @@ pub fn handle_key_event(app: &mut App, conn: &rusqlite::Connection, key: KeyEven
             return Ok(false);
         }
         KeyCode::Esc => {
-            // If in TODO input mode on Dashboard, let the TODO handler process ESC to cancel input
-            if app.active_tab == Tab::Dashboard && app.todo_input_mode {
-                return handle_dashboard_tab(app, conn, key);
-            }
-            // Otherwise, clear message overlay
+            // Clear message overlay
             app.message = None;
             return Ok(false);
         }
         KeyCode::Char('1') => {
-            if app.active_tab == Tab::Dashboard && !app.todo_input_mode {
+            if app.active_tab == Tab::Dashboard {
                 app.focused_panel_idx = Some(0);
             } else {
                 app.active_tab = Tab::Dashboard;
@@ -54,7 +50,7 @@ pub fn handle_key_event(app: &mut App, conn: &rusqlite::Connection, key: KeyEven
             return Ok(false);
         }
         KeyCode::Char('2') => {
-            if app.active_tab == Tab::Dashboard && !app.todo_input_mode {
+            if app.active_tab == Tab::Dashboard {
                 app.focused_panel_idx = Some(1);
             } else {
                 app.active_tab = Tab::Log;
@@ -64,7 +60,7 @@ pub fn handle_key_event(app: &mut App, conn: &rusqlite::Connection, key: KeyEven
             return Ok(false);
         }
         KeyCode::Char('3') => {
-            if app.active_tab == Tab::Dashboard && !app.todo_input_mode {
+            if app.active_tab == Tab::Dashboard {
                 app.focused_panel_idx = Some(2);
             } else {
                 app.active_tab = Tab::Settings;
@@ -72,19 +68,23 @@ pub fn handle_key_event(app: &mut App, conn: &rusqlite::Connection, key: KeyEven
             }
             return Ok(false);
         }
-        // Letter-based tab shortcuts (disabled during TODO input mode)
-        KeyCode::Char('d') | KeyCode::Char('D') if !app.todo_input_mode => {
-            app.active_tab = Tab::Dashboard;
-            app.focused_panel_idx = None;
-            return Ok(false);
+        // Letter-based tab shortcuts
+        KeyCode::Char('d') | KeyCode::Char('D') => {
+            // In vim mode on Dashboard, 'd' starts 'dd' (delete) — let tab handler process it
+            if !(app.config.vim_mode && app.active_tab == Tab::Dashboard) {
+                app.active_tab = Tab::Dashboard;
+                app.focused_panel_idx = None;
+                return Ok(false);
+            }
+            // Fall through to tab handler for vim 'dd'
         }
-        KeyCode::Char('l') | KeyCode::Char('L') if !app.todo_input_mode => {
+        KeyCode::Char('l') | KeyCode::Char('L') => {
             app.active_tab = Tab::Log;
             app.focused_panel_idx = None;
             app.load_log(conn)?;
             return Ok(false);
         }
-        KeyCode::Char('s') | KeyCode::Char('S') if !app.todo_input_mode => {
+        KeyCode::Char('s') | KeyCode::Char('S') => {
             app.active_tab = Tab::Settings;
             app.focused_panel_idx = None;
             return Ok(false);
@@ -148,48 +148,51 @@ pub fn handle_overlay_prompt(
     conn: &rusqlite::Connection,
     key: KeyEvent,
 ) -> Result<bool> {
-    let Overlay::Prompt {
-        label,
-        value,
-        action,
-    } = app.overlay.clone()
-    else {
+    let Overlay::Prompt { label, action } = app.overlay.clone() else {
         return Ok(false);
     };
-    match key.code {
-        KeyCode::Esc => {
+    use crate::tui::text_input::TextInputEvent;
+    match app.prompt_input.handle_key(key.code) {
+        TextInputEvent::Cancel => {
             app.overlay = Overlay::None;
         }
-        KeyCode::Backspace => {
-            let mut v = value;
-            v.pop();
-            app.overlay = Overlay::Prompt {
-                label,
-                value: v,
-                action,
-            };
+        TextInputEvent::Continue => {
+            // Keep label/action in sync (prompt_input owns the buffer now)
+            app.overlay = Overlay::Prompt { label, action };
         }
-        KeyCode::Enter => {
-            let task_name = if value.trim().is_empty() {
+        TextInputEvent::Submit(value) => {
+            let task_name = if value.is_empty() {
                 "Untitled Session".to_string()
             } else {
-                value.trim().to_string()
+                value.clone()
             };
             match action {
+                PromptAction::AddTodo => {
+                    if !value.is_empty() {
+                        use crate::models::todo;
+                        match todo::insert(conn, &value) {
+                            Ok(_) => {
+                                let _ = app.load_todos(conn);
+                                app.message = Some(MessageOverlay::success(format!(
+                                    "TODO added: \"{value}\""
+                                )));
+                            }
+                            Err(e) => {
+                                app.message = Some(MessageOverlay::error(e.to_string()));
+                            }
+                        }
+                    }
+                    app.overlay = Overlay::None;
+                }
                 PromptAction::StartSession => {
-                    // Step 1 confirmed: move to tag prompt (step 2)
-                    app.overlay = Overlay::Prompt {
-                        label: "Tag (optional, press Enter to skip):".to_string(),
-                        value: String::new(),
-                        action: PromptAction::StartSessionTag { task: task_name },
-                    };
+                    app.open_prompt(
+                        "Tag (optional, press Enter to skip):",
+                        "",
+                        PromptAction::StartSessionTag { task: task_name },
+                    );
                 }
                 PromptAction::StartSessionTag { task } => {
-                    let tag_opt = if value.trim().is_empty() {
-                        None
-                    } else {
-                        Some(value.trim().to_string())
-                    };
+                    let tag_opt = if value.is_empty() { None } else { Some(value) };
                     match session_store::get_active_session(conn)? {
                         Some(existing) => {
                             let elapsed = format_elapsed(existing.start_time);
@@ -202,7 +205,6 @@ pub fn handle_overlay_prompt(
                             ));
                         }
                         None => {
-                            // Get selected TODO ID if any
                             let todo_id = app
                                 .selected_todo_idx
                                 .and_then(|idx| app.todos.get(idx).map(|t| t.id));
@@ -228,7 +230,6 @@ pub fn handle_overlay_prompt(
                             )));
                             let sel = app.log_selected;
                             app.load_log(conn)?;
-                            // Restore selection
                             let max = app.log_page_entries(app.log_page).len().saturating_sub(1);
                             app.log_selected = sel.min(max);
                         }
@@ -239,32 +240,23 @@ pub fn handle_overlay_prompt(
                     app.overlay = Overlay::None;
                 }
                 PromptAction::StartPomodoroName => {
-                    // Move to tag step
-                    app.overlay = Overlay::Prompt {
-                        label: "Pomodoro — tag (optional):".to_string(),
-                        value: String::new(),
-                        action: PromptAction::StartPomodoroTag { task: task_name },
-                    };
+                    app.open_prompt(
+                        "Pomodoro — tag (optional):",
+                        "",
+                        PromptAction::StartPomodoroTag { task: task_name },
+                    );
                 }
                 PromptAction::StartPomodoroTag { task } => {
-                    let tag_opt = if value.trim().is_empty() {
-                        None
-                    } else {
-                        Some(value.trim().to_string())
-                    };
-                    // Get selected TODO ID if any, to link to the Pomodoro session
+                    let tag_opt = if value.is_empty() { None } else { Some(value) };
                     let todo_id = app
                         .selected_todo_idx
                         .and_then(|idx| app.todos.get(idx).map(|t| t.id));
-
-                    // Create a database session record with optional TODO link
                     session_store::insert_session_with_todo(
                         conn,
                         &task,
                         tag_opt.as_deref(),
                         todo_id,
                     )?;
-
                     let config =
                         PomodoroConfig::resolve(None, None, None, None).unwrap_or_default();
                     let timer = PomodoroTimer::new(task, tag_opt, config);
@@ -275,16 +267,6 @@ pub fn handle_overlay_prompt(
                 }
             }
         }
-        KeyCode::Char(c) => {
-            let mut v = value;
-            v.push(c);
-            app.overlay = Overlay::Prompt {
-                label,
-                value: v,
-                action,
-            };
-        }
-        _ => {}
     }
     Ok(false)
 }
@@ -363,11 +345,7 @@ fn handle_overlay_mode_selector(
                         .selected_todo_idx
                         .and_then(|idx| app.todos.get(idx).map(|t| t.title.clone()))
                         .unwrap_or_default();
-                    app.overlay = Overlay::Prompt {
-                        label: "Session name:".to_string(),
-                        value: default_task,
-                        action: PromptAction::StartSession,
-                    };
+                    app.open_prompt("Session name:", &default_task, PromptAction::StartSession);
                 }
             } else {
                 // Pomodoro: gather task name
@@ -376,11 +354,11 @@ fn handle_overlay_mode_selector(
                     .selected_todo_idx
                     .and_then(|idx| app.todos.get(idx).map(|t| t.title.clone()))
                     .unwrap_or_default();
-                app.overlay = Overlay::Prompt {
-                    label: "Pomodoro — task name:".to_string(),
-                    value: default_task,
-                    action: PromptAction::StartPomodoroName,
-                };
+                app.open_prompt(
+                    "Pomodoro — task name:",
+                    &default_task,
+                    PromptAction::StartPomodoroName,
+                );
             }
         }
         _ => {}
@@ -425,7 +403,7 @@ pub fn handle_dashboard_tab(
     key: KeyEvent,
 ) -> Result<bool> {
     // [F] toggles full Pomodoro panel view (US11)
-    if key.code == KeyCode::Char('f') && !app.todo_input_mode {
+    if key.code == KeyCode::Char('f') {
         app.full_pomodoro_panel = !app.full_pomodoro_panel;
         return Ok(false);
     }
@@ -442,7 +420,7 @@ pub fn handle_dashboard_tab(
     }
 
     // Pomodoro controls (when Pomodoro timer is active)
-    if app.pomodoro_timer.is_some() && !app.todo_input_mode {
+    if app.pomodoro_timer.is_some() {
         match key.code {
             KeyCode::Char('p') | KeyCode::Char('P') => {
                 if let Some(ref mut timer) = app.pomodoro_timer {
@@ -485,7 +463,7 @@ pub fn handle_dashboard_tab(
     }
 
     match key.code {
-        KeyCode::Char('e') | KeyCode::Char('E') | KeyCode::Enter if !app.todo_input_mode => {
+        KeyCode::Char('e') | KeyCode::Char('E') | KeyCode::Enter => {
             match session_store::stop_session(conn) {
                 Ok(session) => {
                     let elapsed = session
@@ -508,7 +486,7 @@ pub fn handle_dashboard_tab(
                 }
             }
         }
-        KeyCode::Char('n') | KeyCode::Char('N') if !app.todo_input_mode => {
+        KeyCode::Char('n') | KeyCode::Char('N') => {
             if app.active_session.is_some() {
                 app.message = Some(MessageOverlay::warning("Session already running."));
             } else if app.pomodoro_timer.is_some() {
@@ -520,8 +498,77 @@ pub fn handle_dashboard_tab(
             }
         }
         _ => {
-            // Delegate TODO-related keys to the TODO handler (includes ESC, input handling, etc.)
-            crate::tui::handlers_todo::handle_todo_key(app, conn, key.code)?;
+            use crate::tui::keyboard::KeyAction;
+
+            // Route through keyboard handler for vim-aware navigation
+            // Sync vim_mode from config (may differ if settings were changed at runtime)
+            app.keyboard_handler.set_vim_mode(app.config.vim_mode);
+            let action = app.keyboard_handler.handle_key(key);
+            let len = app.todos.len();
+            match action {
+                KeyAction::FocusDown => {
+                    if len > 0 {
+                        app.selected_todo_idx = Some(match app.selected_todo_idx {
+                            None => 0,
+                            Some(i) if i + 1 < len => i + 1,
+                            Some(i) => i,
+                        });
+                    }
+                }
+                KeyAction::FocusUp => {
+                    if len > 0 {
+                        app.selected_todo_idx = Some(match app.selected_todo_idx {
+                            None => 0,
+                            Some(i) if i > 0 => i - 1,
+                            Some(i) => i,
+                        });
+                    }
+                }
+                KeyAction::JumpTop => {
+                    if len > 0 {
+                        app.selected_todo_idx = Some(0);
+                    }
+                }
+                KeyAction::JumpBottom => {
+                    if len > 0 {
+                        app.selected_todo_idx = Some(len - 1);
+                    }
+                }
+                KeyAction::DeleteItem => {
+                    // Auto-select first todo if nothing selected yet
+                    if app.selected_todo_idx.is_none() && len > 0 {
+                        app.selected_todo_idx = Some(0);
+                    }
+                    if let Some(idx) = app.selected_todo_idx {
+                        if idx < len {
+                            let todo_id = app.todos[idx].id;
+                            if crate::models::todo::can_delete(conn, todo_id)? {
+                                crate::models::todo::delete(conn, todo_id)?;
+                                app.load_todos(conn)?;
+                                let new_len = app.todos.len();
+                                app.selected_todo_idx = if new_len == 0 {
+                                    None
+                                } else {
+                                    Some(idx.min(new_len - 1))
+                                };
+                                app.message =
+                                    Some(MessageOverlay::success("Todo deleted."));
+                            } else {
+                                app.message = Some(MessageOverlay::error(
+                                    "Cannot delete TODO linked to active session",
+                                ));
+                            }
+                        }
+                    }
+                }
+                KeyAction::None => {
+                    // Not a vim/nav command — delegate to todo handler (a, c, s, Enter, etc.)
+                    crate::tui::handlers_todo::handle_todo_key(app, conn, key.code)?;
+                }
+                _ => {
+                    crate::tui::handlers_todo::handle_todo_key(app, conn, key.code)?;
+                }
+            }
         }
     }
     Ok(false)
@@ -570,23 +617,12 @@ pub fn handle_log_tab(app: &mut App, conn: &rusqlite::Connection, key: KeyEvent)
                 app.log_selected = page_len - 1;
             }
         }
-        KeyCode::Char('d') | KeyCode::Char('D') => {
-            if page_len > 0 {
-                let session = &app.log_page_entries(app.log_page)[app.log_selected];
-                app.overlay = Overlay::ConfirmDelete {
-                    session_id: session.id,
-                    session_name: session.task.clone(),
-                };
-            }
-        }
         KeyCode::Char('r') | KeyCode::Char('R') => {
             if page_len > 0 {
                 let session = &app.log_page_entries(app.log_page)[app.log_selected];
-                app.overlay = Overlay::Prompt {
-                    label: "Rename session:".to_string(),
-                    value: session.task.clone(),
-                    action: PromptAction::RenameSession { id: session.id },
-                };
+                let task = session.task.clone();
+                let id = session.id;
+                app.open_prompt("Rename session:", &task, PromptAction::RenameSession { id });
             }
         }
         _ => {}
@@ -630,7 +666,7 @@ pub fn handle_settings_tab(app: &mut App, key: KeyEvent) -> Result<bool> {
             }
         }
 
-        // Also allow Enter to toggle vim when selected
+        // Enter to toggle vim (row 0) or cycle theme (row 1)
         KeyCode::Enter if app.settings_selected == 0 => {
             app.config.vim_mode = !app.config.vim_mode;
             let msg = if app.config.vim_mode {
@@ -646,92 +682,128 @@ pub fn handle_settings_tab(app: &mut App, key: KeyEvent) -> Result<bool> {
             }
         }
 
-        // Increase value for Pomodoro rows
+        // Increase value for theme (row 1) or Pomodoro rows (2-5)
         KeyCode::Char('+') | KeyCode::Char('=') | KeyCode::Right => {
-            let changed = match app.settings_selected {
+            match app.settings_selected {
                 1 => {
-                    if app.pomo_config.work_duration_mins < 120 {
-                        app.pomo_config.work_duration_mins += 1;
-                        true
+                    // Cycle theme forward: None → onedark → material → light → dark → None
+                    app.config.theme = next_theme(app.config.theme.as_deref());
+                    let path = crate::config::config_file_path();
+                    let label = app.config.theme.as_deref().unwrap_or("auto");
+                    if let Err(e) = save_config(&path, &app.config) {
+                        app.message =
+                            Some(MessageOverlay::error(format!("Failed to save: {e}")));
                     } else {
-                        false
+                        app.message =
+                            Some(MessageOverlay::success(format!("Theme: {label}")));
                     }
                 }
-                2 => {
-                    if app.pomo_config.break_duration_mins < 60 {
-                        app.pomo_config.break_duration_mins += 1;
-                        true
-                    } else {
-                        false
+                _ => {
+                    let changed = match app.settings_selected {
+                        2 => {
+                            if app.pomo_config.work_duration_mins < 120 {
+                                app.pomo_config.work_duration_mins += 1;
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        3 => {
+                            if app.pomo_config.break_duration_mins < 60 {
+                                app.pomo_config.break_duration_mins += 1;
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        4 => {
+                            if app.pomo_config.long_break_duration_mins < 60 {
+                                app.pomo_config.long_break_duration_mins += 1;
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        5 => {
+                            if app.pomo_config.long_break_after < 10 {
+                                app.pomo_config.long_break_after += 1;
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        _ => false,
+                    };
+                    if changed {
+                        let path = pomodoro_config_path();
+                        if let Err(e) = save_to_file(&path, &app.pomo_config) {
+                            app.message =
+                                Some(MessageOverlay::error(format!("Failed to save: {e}")));
+                        }
                     }
-                }
-                3 => {
-                    if app.pomo_config.long_break_duration_mins < 60 {
-                        app.pomo_config.long_break_duration_mins += 1;
-                        true
-                    } else {
-                        false
-                    }
-                }
-                4 => {
-                    if app.pomo_config.long_break_after < 10 {
-                        app.pomo_config.long_break_after += 1;
-                        true
-                    } else {
-                        false
-                    }
-                }
-                _ => false,
-            };
-            if changed {
-                let path = pomodoro_config_path();
-                if let Err(e) = save_to_file(&path, &app.pomo_config) {
-                    app.message = Some(MessageOverlay::error(format!("Failed to save: {e}")));
                 }
             }
         }
 
-        // Decrease value for Pomodoro rows
+        // Decrease value for theme (row 1) or Pomodoro rows (2-5)
         KeyCode::Char('-') | KeyCode::Left => {
-            let changed = match app.settings_selected {
+            match app.settings_selected {
                 1 => {
-                    if app.pomo_config.work_duration_mins > 1 {
-                        app.pomo_config.work_duration_mins -= 1;
-                        true
+                    // Cycle theme backward: None → dark → light → material → onedark → None
+                    app.config.theme = prev_theme(app.config.theme.as_deref());
+                    let path = crate::config::config_file_path();
+                    let label = app.config.theme.as_deref().unwrap_or("auto");
+                    if let Err(e) = save_config(&path, &app.config) {
+                        app.message =
+                            Some(MessageOverlay::error(format!("Failed to save: {e}")));
                     } else {
-                        false
+                        app.message =
+                            Some(MessageOverlay::success(format!("Theme: {label}")));
                     }
                 }
-                2 => {
-                    if app.pomo_config.break_duration_mins > 1 {
-                        app.pomo_config.break_duration_mins -= 1;
-                        true
-                    } else {
-                        false
+                _ => {
+                    let changed = match app.settings_selected {
+                        2 => {
+                            if app.pomo_config.work_duration_mins > 1 {
+                                app.pomo_config.work_duration_mins -= 1;
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        3 => {
+                            if app.pomo_config.break_duration_mins > 1 {
+                                app.pomo_config.break_duration_mins -= 1;
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        4 => {
+                            if app.pomo_config.long_break_duration_mins > 1 {
+                                app.pomo_config.long_break_duration_mins -= 1;
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        5 => {
+                            if app.pomo_config.long_break_after > 2 {
+                                app.pomo_config.long_break_after -= 1;
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        _ => false,
+                    };
+                    if changed {
+                        let path = pomodoro_config_path();
+                        if let Err(e) = save_to_file(&path, &app.pomo_config) {
+                            app.message =
+                                Some(MessageOverlay::error(format!("Failed to save: {e}")));
+                        }
                     }
-                }
-                3 => {
-                    if app.pomo_config.long_break_duration_mins > 1 {
-                        app.pomo_config.long_break_duration_mins -= 1;
-                        true
-                    } else {
-                        false
-                    }
-                }
-                4 => {
-                    if app.pomo_config.long_break_after > 2 {
-                        app.pomo_config.long_break_after -= 1;
-                        true
-                    } else {
-                        false
-                    }
-                }
-                _ => false,
-            };
-            if changed {
-                let path = pomodoro_config_path();
-                if let Err(e) = save_to_file(&path, &app.pomo_config) {
-                    app.message = Some(MessageOverlay::error(format!("Failed to save: {e}")));
                 }
             }
         }
@@ -739,6 +811,35 @@ pub fn handle_settings_tab(app: &mut App, key: KeyEvent) -> Result<bool> {
         _ => {}
     }
     Ok(false)
+}
+
+// ── Theme cycling helpers ──────────────────────────────────────────────────────
+
+/// Theme cycle order: auto → onedark → material → light → dark → auto
+const THEME_CYCLE: &[Option<&str>] = &[
+    None,
+    Some("onedark"),
+    Some("material"),
+    Some("light"),
+    Some("dark"),
+];
+
+fn theme_index(current: Option<&str>) -> usize {
+    THEME_CYCLE
+        .iter()
+        .position(|t| *t == current)
+        .unwrap_or(0)
+}
+
+fn next_theme(current: Option<&str>) -> Option<String> {
+    let idx = (theme_index(current) + 1) % THEME_CYCLE.len();
+    THEME_CYCLE[idx].map(|s| s.to_string())
+}
+
+fn prev_theme(current: Option<&str>) -> Option<String> {
+    let idx = theme_index(current);
+    let prev = if idx == 0 { THEME_CYCLE.len() - 1 } else { idx - 1 };
+    THEME_CYCLE[prev].map(|s| s.to_string())
 }
 
 // ── Unit tests ─────────────────────────────────────────────────────────────────
@@ -823,43 +924,25 @@ mod tests {
     fn prompt_printable_char_appends_to_value() {
         let (conn, _f) = test_conn();
         let mut app = make_app();
-        app.overlay = Overlay::Prompt {
-            label: "test:".into(),
-            value: "he".into(),
-            action: PromptAction::StartSession,
-        };
+        app.open_prompt("test:", "he", PromptAction::StartSession);
         handle_overlay_prompt(&mut app, &conn, make_key(KeyCode::Char('y'))).unwrap();
-        let Overlay::Prompt { value, .. } = &app.overlay else {
-            panic!()
-        };
-        assert_eq!(value, "hey");
+        assert_eq!(app.prompt_input.buffer, "hey");
     }
 
     #[test]
     fn prompt_backspace_removes_last_char() {
         let (conn, _f) = test_conn();
         let mut app = make_app();
-        app.overlay = Overlay::Prompt {
-            label: "test:".into(),
-            value: "ab".into(),
-            action: PromptAction::StartSession,
-        };
+        app.open_prompt("test:", "ab", PromptAction::StartSession);
         handle_overlay_prompt(&mut app, &conn, make_key(KeyCode::Backspace)).unwrap();
-        let Overlay::Prompt { value, .. } = &app.overlay else {
-            panic!()
-        };
-        assert_eq!(value, "a");
+        assert_eq!(app.prompt_input.buffer, "a");
     }
 
     #[test]
     fn prompt_esc_clears_overlay() {
         let (conn, _f) = test_conn();
         let mut app = make_app();
-        app.overlay = Overlay::Prompt {
-            label: "test:".into(),
-            value: "abc".into(),
-            action: PromptAction::StartSession,
-        };
+        app.open_prompt("test:", "abc", PromptAction::StartSession);
         handle_overlay_prompt(&mut app, &conn, make_key(KeyCode::Esc)).unwrap();
         assert!(matches!(app.overlay, Overlay::None));
     }
@@ -869,11 +952,7 @@ mod tests {
         let (conn, _f) = test_conn();
         let mut app = make_app();
         // Step 1: enter empty name → moves to tag prompt with "Untitled Session"
-        app.overlay = Overlay::Prompt {
-            label: "test:".into(),
-            value: "".into(),
-            action: PromptAction::StartSession,
-        };
+        app.open_prompt("test:", "", PromptAction::StartSession);
         handle_overlay_prompt(&mut app, &conn, make_key(KeyCode::Enter)).unwrap();
         // Now in step 2 (tag prompt)
         assert!(matches!(
@@ -894,12 +973,8 @@ mod tests {
     fn prompt_enter_nonempty_uses_provided_name() {
         let (conn, _f) = test_conn();
         let mut app = make_app();
-        // Step 1: enter name
-        app.overlay = Overlay::Prompt {
-            label: "test:".into(),
-            value: "deep work".into(),
-            action: PromptAction::StartSession,
-        };
+        // Step 1: enter name via pre-filled prompt
+        app.open_prompt("test:", "deep work", PromptAction::StartSession);
         handle_overlay_prompt(&mut app, &conn, make_key(KeyCode::Enter)).unwrap();
         // Step 2: press Enter to skip tag
         handle_overlay_prompt(&mut app, &conn, make_key(KeyCode::Enter)).unwrap();
@@ -913,16 +988,11 @@ mod tests {
         let (conn, _f) = test_conn();
         let mut app = make_app();
         // Step 1: enter name
-        app.overlay = Overlay::Prompt {
-            label: "test:".into(),
-            value: "coding".into(),
-            action: PromptAction::StartSession,
-        };
+        app.open_prompt("test:", "coding", PromptAction::StartSession);
         handle_overlay_prompt(&mut app, &conn, make_key(KeyCode::Enter)).unwrap();
-        // Step 2: enter a tag
-        if let Overlay::Prompt { ref mut value, .. } = app.overlay {
-            *value = "dev".to_string();
-        }
+        // Step 2: set tag directly in prompt_input buffer
+        app.prompt_input.buffer = "dev".to_string();
+        app.prompt_input.cursor_pos = 3;
         handle_overlay_prompt(&mut app, &conn, make_key(KeyCode::Enter)).unwrap();
         let active = session_store::get_active_session(&conn).unwrap();
         assert!(active.is_some());
@@ -1129,18 +1199,17 @@ mod tests {
         assert!(!app.config.vim_mode);
     }
 
-    // T040: Delete flow tests
+    // T040: Delete flow tests — 'd' no longer deletes sessions in Log tab
+    // (the global handler intercepts 'd' for Dashboard navigation; sessions are read-only)
     #[test]
-    fn log_d_with_selection_opens_confirm_overlay() {
+    fn log_d_does_not_open_confirm_overlay() {
         let (conn, _f) = test_conn();
-        let id = insert_completed_session(&conn, "to delete");
+        let _id = insert_completed_session(&conn, "not deleted");
         let mut app = make_app();
         app.load_log(&conn).unwrap();
         handle_log_tab(&mut app, &conn, make_key(KeyCode::Char('d'))).unwrap();
-        assert!(matches!(
-            app.overlay,
-            Overlay::ConfirmDelete { session_id, .. } if session_id == id
-        ));
+        // No ConfirmDelete overlay — 'd' is reserved for Dashboard navigation globally
+        assert!(matches!(app.overlay, Overlay::None));
     }
 
     #[test]
@@ -1200,11 +1269,8 @@ mod tests {
         let mut app = make_app();
         app.load_log(&conn).unwrap();
         handle_log_tab(&mut app, &conn, make_key(KeyCode::Char('r'))).unwrap();
-        let Overlay::Prompt { value, action, .. } = &app.overlay else {
-            panic!("Expected Prompt")
-        };
-        assert_eq!(value, "original name");
-        assert!(matches!(action, PromptAction::RenameSession { .. }));
+        assert!(matches!(app.overlay, Overlay::Prompt { action: PromptAction::RenameSession { .. }, .. }));
+        assert_eq!(app.prompt_input.buffer, "original name");
     }
 
     #[test]
@@ -1222,11 +1288,7 @@ mod tests {
         let id = insert_completed_session(&conn, "old");
         let mut app = make_app();
         app.load_log(&conn).unwrap();
-        app.overlay = Overlay::Prompt {
-            label: "Rename session:".into(),
-            value: "new name".into(),
-            action: PromptAction::RenameSession { id },
-        };
+        app.open_prompt("Rename session:", "new name", PromptAction::RenameSession { id });
         handle_overlay_prompt(&mut app, &conn, make_key(KeyCode::Enter)).unwrap();
         let task: String = conn
             .query_row("SELECT task FROM sessions WHERE id = ?1", [id], |r| {
@@ -1252,5 +1314,57 @@ mod tests {
         app.overlay = Overlay::Help;
         handle_overlay(&mut app, &conn, make_key(KeyCode::Char('x'))).unwrap();
         assert!(matches!(app.overlay, Overlay::None));
+    }
+
+    // T036: Vim gg/G jump navigation on Dashboard todo list
+    #[test]
+    fn dashboard_vim_big_g_jumps_to_last_todo() {
+        let (conn, _f) = test_conn();
+        crate::models::todo::insert(&conn, "first").unwrap();
+        crate::models::todo::insert(&conn, "second").unwrap();
+        crate::models::todo::insert(&conn, "third").unwrap();
+        let mut app = make_app();
+        app.config.vim_mode = true;
+        app.load_todos(&conn).unwrap();
+        app.selected_todo_idx = Some(0);
+
+        handle_dashboard_tab(&mut app, &conn, make_key(KeyCode::Char('G'))).unwrap();
+        assert_eq!(app.selected_todo_idx, Some(2), "G should jump to last todo");
+    }
+
+    #[test]
+    fn dashboard_vim_g_jumps_to_first_todo() {
+        let (conn, _f) = test_conn();
+        crate::models::todo::insert(&conn, "first").unwrap();
+        crate::models::todo::insert(&conn, "second").unwrap();
+        let mut app = make_app();
+        app.config.vim_mode = true;
+        app.load_todos(&conn).unwrap();
+        app.selected_todo_idx = Some(1);
+
+        // 'gg' (two g presses within timeout) jumps to first todo
+        handle_dashboard_tab(&mut app, &conn, make_key(KeyCode::Char('g'))).unwrap();
+        // first press starts pending — selection unchanged
+        assert_eq!(app.selected_todo_idx, Some(1), "first g should not move");
+        handle_dashboard_tab(&mut app, &conn, make_key(KeyCode::Char('g'))).unwrap();
+        assert_eq!(
+            app.selected_todo_idx,
+            Some(0),
+            "gg should jump to first todo"
+        );
+    }
+
+    #[test]
+    fn dashboard_g_ignored_when_vim_mode_off() {
+        let (conn, _f) = test_conn();
+        crate::models::todo::insert(&conn, "only").unwrap();
+        let mut app = make_app();
+        app.config.vim_mode = false;
+        app.load_todos(&conn).unwrap();
+        app.selected_todo_idx = Some(0);
+
+        // Without vim mode, 'g' falls through to todo handler which ignores it
+        handle_dashboard_tab(&mut app, &conn, make_key(KeyCode::Char('g'))).unwrap();
+        assert_eq!(app.selected_todo_idx, Some(0)); // unchanged
     }
 }

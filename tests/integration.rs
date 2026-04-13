@@ -1,5 +1,6 @@
 mod integration {
     mod test_abandonment;
+    mod test_config_persistence;
     mod test_export;
     mod test_keyboard_bindings;
     mod test_log;

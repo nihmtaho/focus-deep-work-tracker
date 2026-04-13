@@ -93,7 +93,15 @@ pub fn update_status(conn: &Connection, id: u64, status: &str) -> Result<Todo> {
 }
 
 /// Delete a TODO by id.
+///
+/// Clears any `sessions.todo_id` references first so the FK constraint does
+/// not block deletion of a todo that was linked to completed sessions.
 pub fn delete(conn: &Connection, id: u64) -> Result<()> {
+    // NULL out completed-session references before removing the todo
+    conn.execute(
+        "UPDATE sessions SET todo_id = NULL WHERE todo_id = ?1",
+        rusqlite::params![id as i64],
+    )?;
     conn.execute(
         "DELETE FROM todos WHERE id = ?1",
         rusqlite::params![id as i64],

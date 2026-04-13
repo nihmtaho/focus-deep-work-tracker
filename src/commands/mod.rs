@@ -1,3 +1,4 @@
+pub mod config;
 pub mod export;
 pub mod log;
 pub mod pomo_stats;

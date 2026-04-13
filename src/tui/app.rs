@@ -5,8 +5,12 @@ use crate::models::session::Session;
 use crate::models::todo::Todo;
 use crate::pomodoro::config::PomodoroConfig;
 use crate::pomodoro::timer::PomodoroTimer;
-use crate::tui::keyboard::{KeyContext, KeyHandler};
+use crate::tui::keyboard::{KeyHandler};
 use crate::tui::report::ReportMetrics;
+use crate::tui::text_input::TextInput;
+
+// Re-export so existing callers (ui.rs) can use `app::VimInputMode`.
+pub use crate::tui::text_input::VimInputMode;
 
 // ── Time window ────────────────────────────────────────────────────────────────
 
@@ -80,6 +84,7 @@ pub enum Tab {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PromptAction {
+    AddTodo,
     StartSession,
     /// Second step: user already entered task name, now entering optional tag.
     StartSessionTag {
@@ -103,7 +108,6 @@ pub enum Overlay {
     None,
     Prompt {
         label: String,
-        value: String,
         action: PromptAction,
     },
     ConfirmDelete {
@@ -171,13 +175,13 @@ pub struct App {
     pub pomodoro_timer: Option<PomodoroTimer>,
     /// Currently loaded Pomodoro default config (for the Settings tab).
     pub pomo_config: PomodoroConfig,
-    /// Selected row index in the Settings tab (0=vim, 1=work, 2=break, 3=long_break, 4=long_break_after).
+    /// Selected row index in the Settings tab (0=vim, 1=theme, 2=work, 3=break, 4=long_break, 5=long_break_after).
     pub settings_selected: usize,
     // TODO fields for 007-ui-refresh feature
     pub todos: Vec<Todo>,
     pub selected_todo_idx: Option<usize>,
-    pub todo_input_mode: bool,
-    pub todo_input_buffer: String,
+    /// Vim-aware text input state for all prompt overlays (todo add, session name, tag, rename).
+    pub prompt_input: TextInput,
     // Keyboard handler for context-aware input routing
     pub keyboard_handler: KeyHandler,
     /// Currently focused dashboard panel index (0=Timer/Pomodoro, 1=TODOs, 2=Report).
@@ -219,8 +223,7 @@ impl App {
             settings_selected: 0,
             todos: Vec::new(),
             selected_todo_idx: None,
-            todo_input_mode: false,
-            todo_input_buffer: String::new(),
+            prompt_input: TextInput::new(vim_mode),
             keyboard_handler: KeyHandler::new(vim_mode),
             focused_panel_idx: None,
             report_metrics: ReportMetrics::default(),
@@ -352,18 +355,31 @@ impl App {
         session_store::count_completed(conn)
     }
 
-    /// Enter TODO input mode: set keyboard context to Input and clear buffer for new entry
-    pub fn enter_todo_input_mode(&mut self) {
-        self.todo_input_mode = true;
-        self.todo_input_buffer.clear();
-        self.keyboard_handler.set_context(KeyContext::Input);
+    /// Open a Prompt overlay and prepare prompt_input (reset or pre-fill).
+    pub fn open_prompt(&mut self, label: impl Into<String>, initial: &str, action: PromptAction) {
+        self.prompt_input.set_vim_enabled(self.config.vim_mode);
+        if initial.is_empty() {
+            self.prompt_input.reset();
+        } else {
+            self.prompt_input.set_value(initial);
+        }
+        self.overlay = Overlay::Prompt {
+            label: label.into(),
+            action,
+        };
     }
 
-    /// Exit TODO input mode: set keyboard context to Viewing and clear buffer
-    pub fn exit_todo_input_mode(&mut self) {
-        self.todo_input_mode = false;
-        self.todo_input_buffer.clear();
-        self.keyboard_handler.set_context(KeyContext::Viewing);
+    /// Returns true when a Pomodoro session is currently active (timer is running).
+    pub fn has_active_pomodoro(&self) -> bool {
+        self.pomodoro_timer.is_some()
+    }
+
+    /// Persist the current config to disk immediately.
+    ///
+    /// Errors are returned to the caller for surfacing via `MessageOverlay::error`.
+    /// Never silently discarded.
+    pub fn save_config_now(&self) -> anyhow::Result<()> {
+        crate::config::save_config(&crate::config::config_file_path(), &self.config)
     }
 }
 

@@ -70,8 +70,29 @@ enum Commands {
         #[arg(long, conflicts_with = "today")]
         week: bool,
     },
+    /// Get or set persistent configuration
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
+    },
     /// Launch interactive TUI dashboard
     Ui,
+}
+
+#[derive(Subcommand)]
+enum ConfigAction {
+    /// Get the value of a config key
+    Get {
+        /// Config key (theme, vim-mode)
+        key: String,
+    },
+    /// Set a config key to a value
+    Set {
+        /// Config key (theme, vim-mode)
+        key: String,
+        /// New value
+        value: String,
+    },
 }
 
 fn main() {
@@ -116,6 +137,10 @@ fn run(cli: Cli) -> Result<()> {
         Commands::Report { today, week } => commands::report::run(&conn, today, week)?,
         Commands::Export { format } => commands::export::run(&conn, format)?,
         Commands::PomoStats { today, week } => commands::pomo_stats::run(&conn, today, week)?,
+        Commands::Config { action } => match action {
+            ConfigAction::Get { key } => commands::config::run_get(&key)?,
+            ConfigAction::Set { key, value } => commands::config::run_set(&key, &value)?,
+        },
         Commands::Ui => focus::tui::run(conn)?,
     }
 

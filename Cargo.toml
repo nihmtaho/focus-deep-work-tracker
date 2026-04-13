@@ -19,8 +19,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.8"
 ratatui = "0.29"
-crossterm = "0.28"
+crossterm = "0.29"
 ctrlc = "3"
+vimltui = "0.2.1"
 
 [dev-dependencies]
 tempfile = "3"
