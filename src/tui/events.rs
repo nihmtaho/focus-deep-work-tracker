@@ -520,6 +520,24 @@ pub fn handle_dashboard_tab(
             }
         }
         _ => {
+            // Vim gg/G jump navigation for todo list (Dashboard)
+            if app.config.vim_mode && !app.todo_input_mode {
+                match key.code {
+                    KeyCode::Char('g') => {
+                        if !app.todos.is_empty() {
+                            app.selected_todo_idx = Some(0);
+                        }
+                        return Ok(false);
+                    }
+                    KeyCode::Char('G') => {
+                        if !app.todos.is_empty() {
+                            app.selected_todo_idx = Some(app.todos.len() - 1);
+                        }
+                        return Ok(false);
+                    }
+                    _ => {}
+                }
+            }
             // Delegate TODO-related keys to the TODO handler (includes ESC, input handling, etc.)
             crate::tui::handlers_todo::handle_todo_key(app, conn, key.code)?;
         }
@@ -1242,5 +1260,53 @@ mod tests {
         app.overlay = Overlay::Help;
         handle_overlay(&mut app, &conn, make_key(KeyCode::Char('x'))).unwrap();
         assert!(matches!(app.overlay, Overlay::None));
+    }
+
+    // T036: Vim g/G jump navigation on Dashboard todo list
+    #[test]
+    fn dashboard_vim_big_g_jumps_to_last_todo() {
+        let (conn, _f) = test_conn();
+        crate::models::todo::insert(&conn, "first").unwrap();
+        crate::models::todo::insert(&conn, "second").unwrap();
+        crate::models::todo::insert(&conn, "third").unwrap();
+        let mut app = make_app();
+        app.config.vim_mode = true;
+        app.load_todos(&conn).unwrap();
+        app.selected_todo_idx = Some(0);
+
+        handle_dashboard_tab(&mut app, &conn, make_key(KeyCode::Char('G'))).unwrap();
+        assert_eq!(app.selected_todo_idx, Some(2), "G should jump to last todo");
+    }
+
+    #[test]
+    fn dashboard_vim_g_jumps_to_first_todo() {
+        let (conn, _f) = test_conn();
+        crate::models::todo::insert(&conn, "first").unwrap();
+        crate::models::todo::insert(&conn, "second").unwrap();
+        let mut app = make_app();
+        app.config.vim_mode = true;
+        app.load_todos(&conn).unwrap();
+        app.selected_todo_idx = Some(1);
+
+        handle_dashboard_tab(&mut app, &conn, make_key(KeyCode::Char('g'))).unwrap();
+        assert_eq!(
+            app.selected_todo_idx,
+            Some(0),
+            "g should jump to first todo"
+        );
+    }
+
+    #[test]
+    fn dashboard_g_ignored_when_vim_mode_off() {
+        let (conn, _f) = test_conn();
+        crate::models::todo::insert(&conn, "only").unwrap();
+        let mut app = make_app();
+        app.config.vim_mode = false;
+        app.load_todos(&conn).unwrap();
+        app.selected_todo_idx = Some(0);
+
+        // Without vim mode, 'g' falls through to todo handler which ignores it
+        handle_dashboard_tab(&mut app, &conn, make_key(KeyCode::Char('g'))).unwrap();
+        assert_eq!(app.selected_todo_idx, Some(0)); // unchanged
     }
 }
