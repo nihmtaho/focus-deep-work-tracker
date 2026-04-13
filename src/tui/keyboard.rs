@@ -83,6 +83,11 @@ impl KeyHandler {
         self.context
     }
 
+    /// Sync vim_mode from app config (call before handle_key if config may have changed).
+    pub fn set_vim_mode(&mut self, vim_mode: bool) {
+        self.vim_mode = vim_mode;
+    }
+
     /// Handle a keyboard event and return the resulting action.
     ///
     /// Takes `&mut self` because vim multi-key commands (`dd`, `gg`) maintain

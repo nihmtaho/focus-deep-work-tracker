@@ -74,9 +74,13 @@ pub fn handle_key_event(app: &mut App, conn: &rusqlite::Connection, key: KeyEven
         }
         // Letter-based tab shortcuts (disabled during TODO input mode)
         KeyCode::Char('d') | KeyCode::Char('D') if !app.todo_input_mode => {
-            app.active_tab = Tab::Dashboard;
-            app.focused_panel_idx = None;
-            return Ok(false);
+            // In vim mode on Dashboard, 'd' starts 'dd' (delete) — let tab handler process it
+            if !(app.config.vim_mode && app.active_tab == Tab::Dashboard) {
+                app.active_tab = Tab::Dashboard;
+                app.focused_panel_idx = None;
+                return Ok(false);
+            }
+            // Fall through to tab handler for vim 'dd'
         }
         KeyCode::Char('l') | KeyCode::Char('L') if !app.todo_input_mode => {
             app.active_tab = Tab::Log;
@@ -520,26 +524,135 @@ pub fn handle_dashboard_tab(
             }
         }
         _ => {
-            // Vim gg/G jump navigation for todo list (Dashboard)
-            if app.config.vim_mode && !app.todo_input_mode {
-                match key.code {
-                    KeyCode::Char('g') => {
-                        if !app.todos.is_empty() {
+            use crate::tui::keyboard::KeyAction;
+
+            if app.todo_input_mode {
+                if app.config.vim_mode {
+                    // Route through vimltui VimEditor for real vim text editing
+                    enum VimInputResult {
+                        Continue,
+                        Submit(String),
+                        Cancel,
+                    }
+                    let result = if let Some(ref mut editor) = app.todo_vim_editor {
+                        use vimltui::{EditorAction, VimMode};
+                        // Esc in Normal mode cancels input
+                        if key.code == KeyCode::Esc && matches!(editor.mode, VimMode::Normal) {
+                            VimInputResult::Cancel
+                        // Enter in Normal mode submits the todo
+                        } else if key.code == KeyCode::Enter
+                            && matches!(editor.mode, VimMode::Normal)
+                        {
+                            let t =
+                                editor.content().lines().next().unwrap_or("").trim().to_string();
+                            VimInputResult::Submit(t)
+                        } else {
+                            match editor.handle_key(key) {
+                                EditorAction::Save | EditorAction::SaveAndClose => {
+                                    let t = editor
+                                        .content()
+                                        .lines()
+                                        .next()
+                                        .unwrap_or("")
+                                        .trim()
+                                        .to_string();
+                                    VimInputResult::Submit(t)
+                                }
+                                EditorAction::Close | EditorAction::ForceClose => {
+                                    VimInputResult::Cancel
+                                }
+                                _ => VimInputResult::Continue,
+                            }
+                        }
+                    } else {
+                        VimInputResult::Cancel
+                    };
+                    match result {
+                        VimInputResult::Submit(text) if !text.is_empty() => {
+                            crate::models::todo::insert(conn, &text)?;
+                            app.exit_todo_input_mode();
+                            app.load_todos(conn)?;
+                        }
+                        VimInputResult::Submit(_) | VimInputResult::Cancel => {
+                            app.exit_todo_input_mode();
+                        }
+                        VimInputResult::Continue => {}
+                    }
+                } else {
+                    // Non-vim input mode — delegate to simple handler
+                    crate::tui::handlers_todo::handle_todo_key(app, conn, key.code)?;
+                }
+            } else {
+                // Not in input mode — route through keyboard handler for vim-aware navigation
+                // Sync vim_mode from config (may differ if settings were changed at runtime)
+                app.keyboard_handler.set_vim_mode(app.config.vim_mode);
+                let action = app.keyboard_handler.handle_key(key);
+                let len = app.todos.len();
+                match action {
+                    KeyAction::FocusDown => {
+                        if len > 0 {
+                            app.selected_todo_idx = Some(match app.selected_todo_idx {
+                                None => 0,
+                                Some(i) if i + 1 < len => i + 1,
+                                Some(i) => i,
+                            });
+                        }
+                    }
+                    KeyAction::FocusUp => {
+                        if len > 0 {
+                            app.selected_todo_idx = Some(match app.selected_todo_idx {
+                                None => 0,
+                                Some(i) if i > 0 => i - 1,
+                                Some(i) => i,
+                            });
+                        }
+                    }
+                    KeyAction::JumpTop => {
+                        if len > 0 {
                             app.selected_todo_idx = Some(0);
                         }
-                        return Ok(false);
                     }
-                    KeyCode::Char('G') => {
-                        if !app.todos.is_empty() {
-                            app.selected_todo_idx = Some(app.todos.len() - 1);
+                    KeyAction::JumpBottom => {
+                        if len > 0 {
+                            app.selected_todo_idx = Some(len - 1);
                         }
-                        return Ok(false);
                     }
-                    _ => {}
+                    KeyAction::DeleteItem => {
+                        // Auto-select first todo if nothing selected yet
+                        if app.selected_todo_idx.is_none() && len > 0 {
+                            app.selected_todo_idx = Some(0);
+                        }
+                        if let Some(idx) = app.selected_todo_idx {
+                            if idx < len {
+                                let todo_id = app.todos[idx].id;
+                                if crate::models::todo::can_delete(conn, todo_id)? {
+                                    crate::models::todo::delete(conn, todo_id)?;
+                                    app.load_todos(conn)?;
+                                    let new_len = app.todos.len();
+                                    app.selected_todo_idx = if new_len == 0 {
+                                        None
+                                    } else {
+                                        Some(idx.min(new_len - 1))
+                                    };
+                                    app.message =
+                                        Some(MessageOverlay::success("Todo deleted."));
+                                } else {
+                                    app.message = Some(MessageOverlay::error(
+                                        "Cannot delete TODO linked to active session",
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                    KeyAction::None => {
+                        // Not a vim/nav command — delegate to todo handler (a, c, s, Enter, etc.)
+                        crate::tui::handlers_todo::handle_todo_key(app, conn, key.code)?;
+                    }
+                    _ => {
+                        crate::tui::handlers_todo::handle_todo_key(app, conn, key.code)?;
+                    }
                 }
             }
-            // Delegate TODO-related keys to the TODO handler (includes ESC, input handling, etc.)
-            crate::tui::handlers_todo::handle_todo_key(app, conn, key.code)?;
         }
     }
     Ok(false)
@@ -639,7 +752,7 @@ pub fn handle_settings_tab(app: &mut App, key: KeyEvent) -> Result<bool> {
             }
         }
 
-        // Also allow Enter to toggle vim when selected
+        // Enter to toggle vim (row 0) or cycle theme (row 1)
         KeyCode::Enter if app.settings_selected == 0 => {
             app.config.vim_mode = !app.config.vim_mode;
             let msg = if app.config.vim_mode {
@@ -655,92 +768,128 @@ pub fn handle_settings_tab(app: &mut App, key: KeyEvent) -> Result<bool> {
             }
         }
 
-        // Increase value for Pomodoro rows
+        // Increase value for theme (row 1) or Pomodoro rows (2-5)
         KeyCode::Char('+') | KeyCode::Char('=') | KeyCode::Right => {
-            let changed = match app.settings_selected {
+            match app.settings_selected {
                 1 => {
-                    if app.pomo_config.work_duration_mins < 120 {
-                        app.pomo_config.work_duration_mins += 1;
-                        true
+                    // Cycle theme forward: None → onedark → material → light → dark → None
+                    app.config.theme = next_theme(app.config.theme.as_deref());
+                    let path = crate::config::config_file_path();
+                    let label = app.config.theme.as_deref().unwrap_or("auto");
+                    if let Err(e) = save_config(&path, &app.config) {
+                        app.message =
+                            Some(MessageOverlay::error(format!("Failed to save: {e}")));
                     } else {
-                        false
+                        app.message =
+                            Some(MessageOverlay::success(format!("Theme: {label}")));
                     }
                 }
-                2 => {
-                    if app.pomo_config.break_duration_mins < 60 {
-                        app.pomo_config.break_duration_mins += 1;
-                        true
-                    } else {
-                        false
+                _ => {
+                    let changed = match app.settings_selected {
+                        2 => {
+                            if app.pomo_config.work_duration_mins < 120 {
+                                app.pomo_config.work_duration_mins += 1;
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        3 => {
+                            if app.pomo_config.break_duration_mins < 60 {
+                                app.pomo_config.break_duration_mins += 1;
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        4 => {
+                            if app.pomo_config.long_break_duration_mins < 60 {
+                                app.pomo_config.long_break_duration_mins += 1;
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        5 => {
+                            if app.pomo_config.long_break_after < 10 {
+                                app.pomo_config.long_break_after += 1;
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        _ => false,
+                    };
+                    if changed {
+                        let path = pomodoro_config_path();
+                        if let Err(e) = save_to_file(&path, &app.pomo_config) {
+                            app.message =
+                                Some(MessageOverlay::error(format!("Failed to save: {e}")));
+                        }
                     }
-                }
-                3 => {
-                    if app.pomo_config.long_break_duration_mins < 60 {
-                        app.pomo_config.long_break_duration_mins += 1;
-                        true
-                    } else {
-                        false
-                    }
-                }
-                4 => {
-                    if app.pomo_config.long_break_after < 10 {
-                        app.pomo_config.long_break_after += 1;
-                        true
-                    } else {
-                        false
-                    }
-                }
-                _ => false,
-            };
-            if changed {
-                let path = pomodoro_config_path();
-                if let Err(e) = save_to_file(&path, &app.pomo_config) {
-                    app.message = Some(MessageOverlay::error(format!("Failed to save: {e}")));
                 }
             }
         }
 
-        // Decrease value for Pomodoro rows
+        // Decrease value for theme (row 1) or Pomodoro rows (2-5)
         KeyCode::Char('-') | KeyCode::Left => {
-            let changed = match app.settings_selected {
+            match app.settings_selected {
                 1 => {
-                    if app.pomo_config.work_duration_mins > 1 {
-                        app.pomo_config.work_duration_mins -= 1;
-                        true
+                    // Cycle theme backward: None → dark → light → material → onedark → None
+                    app.config.theme = prev_theme(app.config.theme.as_deref());
+                    let path = crate::config::config_file_path();
+                    let label = app.config.theme.as_deref().unwrap_or("auto");
+                    if let Err(e) = save_config(&path, &app.config) {
+                        app.message =
+                            Some(MessageOverlay::error(format!("Failed to save: {e}")));
                     } else {
-                        false
+                        app.message =
+                            Some(MessageOverlay::success(format!("Theme: {label}")));
                     }
                 }
-                2 => {
-                    if app.pomo_config.break_duration_mins > 1 {
-                        app.pomo_config.break_duration_mins -= 1;
-                        true
-                    } else {
-                        false
+                _ => {
+                    let changed = match app.settings_selected {
+                        2 => {
+                            if app.pomo_config.work_duration_mins > 1 {
+                                app.pomo_config.work_duration_mins -= 1;
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        3 => {
+                            if app.pomo_config.break_duration_mins > 1 {
+                                app.pomo_config.break_duration_mins -= 1;
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        4 => {
+                            if app.pomo_config.long_break_duration_mins > 1 {
+                                app.pomo_config.long_break_duration_mins -= 1;
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        5 => {
+                            if app.pomo_config.long_break_after > 2 {
+                                app.pomo_config.long_break_after -= 1;
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        _ => false,
+                    };
+                    if changed {
+                        let path = pomodoro_config_path();
+                        if let Err(e) = save_to_file(&path, &app.pomo_config) {
+                            app.message =
+                                Some(MessageOverlay::error(format!("Failed to save: {e}")));
+                        }
                     }
-                }
-                3 => {
-                    if app.pomo_config.long_break_duration_mins > 1 {
-                        app.pomo_config.long_break_duration_mins -= 1;
-                        true
-                    } else {
-                        false
-                    }
-                }
-                4 => {
-                    if app.pomo_config.long_break_after > 2 {
-                        app.pomo_config.long_break_after -= 1;
-                        true
-                    } else {
-                        false
-                    }
-                }
-                _ => false,
-            };
-            if changed {
-                let path = pomodoro_config_path();
-                if let Err(e) = save_to_file(&path, &app.pomo_config) {
-                    app.message = Some(MessageOverlay::error(format!("Failed to save: {e}")));
                 }
             }
         }
@@ -748,6 +897,35 @@ pub fn handle_settings_tab(app: &mut App, key: KeyEvent) -> Result<bool> {
         _ => {}
     }
     Ok(false)
+}
+
+// ── Theme cycling helpers ──────────────────────────────────────────────────────
+
+/// Theme cycle order: auto → onedark → material → light → dark → auto
+const THEME_CYCLE: &[Option<&str>] = &[
+    None,
+    Some("onedark"),
+    Some("material"),
+    Some("light"),
+    Some("dark"),
+];
+
+fn theme_index(current: Option<&str>) -> usize {
+    THEME_CYCLE
+        .iter()
+        .position(|t| *t == current)
+        .unwrap_or(0)
+}
+
+fn next_theme(current: Option<&str>) -> Option<String> {
+    let idx = (theme_index(current) + 1) % THEME_CYCLE.len();
+    THEME_CYCLE[idx].map(|s| s.to_string())
+}
+
+fn prev_theme(current: Option<&str>) -> Option<String> {
+    let idx = theme_index(current);
+    let prev = if idx == 0 { THEME_CYCLE.len() - 1 } else { idx - 1 };
+    THEME_CYCLE[prev].map(|s| s.to_string())
 }
 
 // ── Unit tests ─────────────────────────────────────────────────────────────────
@@ -1262,7 +1440,7 @@ mod tests {
         assert!(matches!(app.overlay, Overlay::None));
     }
 
-    // T036: Vim g/G jump navigation on Dashboard todo list
+    // T036: Vim gg/G jump navigation on Dashboard todo list
     #[test]
     fn dashboard_vim_big_g_jumps_to_last_todo() {
         let (conn, _f) = test_conn();
@@ -1288,11 +1466,15 @@ mod tests {
         app.load_todos(&conn).unwrap();
         app.selected_todo_idx = Some(1);
 
+        // 'gg' (two g presses within timeout) jumps to first todo
+        handle_dashboard_tab(&mut app, &conn, make_key(KeyCode::Char('g'))).unwrap();
+        // first press starts pending — selection unchanged
+        assert_eq!(app.selected_todo_idx, Some(1), "first g should not move");
         handle_dashboard_tab(&mut app, &conn, make_key(KeyCode::Char('g'))).unwrap();
         assert_eq!(
             app.selected_todo_idx,
             Some(0),
-            "g should jump to first todo"
+            "gg should jump to first todo"
         );
     }
 

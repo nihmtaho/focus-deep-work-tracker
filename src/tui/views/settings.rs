@@ -8,8 +8,8 @@ use ratatui::{
 
 use crate::tui::app::App;
 
-/// Number of settings rows (0=vim, 1=work, 2=break, 3=long_break, 4=long_break_after).
-pub const SETTINGS_ROW_COUNT: usize = 5;
+/// Number of settings rows (0=vim, 1=theme, 2=work, 3=break, 4=long_break, 5=long_break_after).
+pub const SETTINGS_ROW_COUNT: usize = 6;
 
 pub fn render(frame: &mut Frame, app: &App, area: Rect) {
     let chunks = Layout::default()
@@ -17,7 +17,7 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
         .margin(1)
         .constraints([
             Constraint::Length(3), // title
-            Constraint::Length(5), // General section
+            Constraint::Length(7), // General section (vim mode + theme)
             Constraint::Length(8), // Pomodoro section
             Constraint::Length(2), // help bar
             Constraint::Min(0),
@@ -43,9 +43,23 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
     };
     let vim_style = row_style(vim_selected, app.config.vim_mode, app.no_color);
 
+    let theme_selected = app.settings_selected == 1;
+    let theme_name = match app.config.theme.as_deref() {
+        None => "Auto    ",
+        Some("onedark") => "OneDark ",
+        Some("material") => "Material",
+        Some("light") => "Light   ",
+        Some("dark") => "Dark    ",
+        Some(other) => other,
+    };
+    let theme_label = format!("Theme:    [ {theme_name} ]");
+    let theme_style = row_style(theme_selected, app.config.theme.is_some(), app.no_color);
+
     let general_content = Paragraph::new(vec![
         Line::from(Span::raw("")),
         Line::from(Span::styled(vim_label, vim_style)),
+        Line::from(Span::raw("")),
+        Line::from(Span::styled(theme_label.as_str(), theme_style)),
     ])
     .block(
         Block::default()
@@ -58,20 +72,20 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
     // ── Pomodoro Defaults section ─────────────────────────────────────────────
     let p = &app.pomo_config;
     let rows: &[(usize, &str, u32, &str)] = &[
-        (1, "Work Duration    ", p.work_duration_mins, "min  (1–120)"),
+        (2, "Work Duration    ", p.work_duration_mins, "min  (1–120)"),
         (
-            2,
+            3,
             "Break Duration   ",
             p.break_duration_mins,
             "min  (1–60) ",
         ),
         (
-            3,
+            4,
             "Long Break       ",
             p.long_break_duration_mins,
             "min  (1–60) ",
         ),
-        (4, "Long Break After ", p.long_break_after, "sessions     "),
+        (5, "Long Break After ", p.long_break_after, "sessions     "),
     ];
 
     let pomo_lines: Vec<Line> = std::iter::once(Line::from(Span::raw("")))
@@ -102,9 +116,11 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(pomo_block, chunks[2]);
 
     // ── Help bar ──────────────────────────────────────────────────────────────
-    let help = Paragraph::new(" [↑/↓] Select   [+/-] Adjust value   [V] Toggle Vim Mode ")
-        .style(Style::default().fg(Color::DarkGray))
-        .alignment(Alignment::Center);
+    let help = Paragraph::new(
+        " [↑/↓] Select   [+/-] Adjust / Cycle theme   [V] Toggle Vim Mode ",
+    )
+    .style(Style::default().fg(Color::DarkGray))
+    .alignment(Alignment::Center);
     frame.render_widget(help, chunks[3]);
 
     if let Some(msg) = &app.message {
