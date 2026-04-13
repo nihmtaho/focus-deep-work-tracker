@@ -11,23 +11,35 @@ This feature addresses seven usability issues discovered after the initial TUI d
 
 ---
 
+## Clarifications
+
+### Session 2026-04-13
+
+- Q: How does the user toggle vim mode? → A: CLI command `focus config set vim-mode true/false`, mirroring the theme command pattern
+- Q: Does the Log tab delete session history records, or only todo items? → A: Only todo items; session history records are never deleted via the TUI in this feature
+- Q: What is the timeout for vim's partial `d` command before it is discarded? → A: 1 second — after 1s without a second `d`, the partial command is discarded and input resets
+- Q: When are settings written to disk — immediately on change or only on clean exit? → A: Immediately on every change, preventing data loss on crash or force-quit
+
+---
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 — Delete Key Conflict Resolution (Priority: P1)
 
-A user in the **Log tab** tries to delete a log entry by pressing `d`. Instead of deleting the entry, the app switches to the Dashboard tab because `d` is a global tab shortcut.
+A user in the **Log tab** tries to delete a todo item by pressing `d`. Instead of deleting the item, the app switches to the Dashboard tab because `d` is a global tab shortcut.
 
-The user needs a dedicated, unambiguous key for item deletion that does not conflict with tab navigation shortcuts.
+The user needs a dedicated, unambiguous key for todo item deletion that does not conflict with tab navigation shortcuts.
 
 **Why this priority**: Keyboard conflicts make core functionality (deletion) completely inaccessible. This is a blocker for day-to-day use of the Log tab.
 
-**Independent Test**: Open the Log tab, select a session entry, press `Delete` (macOS) or `Backspace` (Linux/Windows). The entry should be removed. Press `d` — the Dashboard tab should activate. Both actions work without conflict.
+**Independent Test**: Open the Log tab with a todo item selected, press `Delete` (macOS) or `Backspace` (Linux/Windows). The todo item should be removed and the list updates. Press `d` — the Dashboard tab should activate. Both actions work without conflict. Session history records in the Log tab are read-only and cannot be deleted.
 
 **Acceptance Scenarios**:
 
-1. **Given** user is on the Log tab with a session selected, **When** they press `Delete` (macOS) or `Backspace` (Linux/Windows), **Then** the selected log entry is removed and the list updates
+1. **Given** user is on the Log tab with a todo item selected, **When** they press `Delete` (macOS) or `Backspace` (Linux/Windows), **Then** the selected todo item is removed and the list updates
 2. **Given** user is on any tab, **When** they press `d`, **Then** the Dashboard tab activates and no delete action occurs
 3. **Given** user is on the Dashboard tab with a todo selected, **When** they press `Delete`/`Backspace`, **Then** the todo is deleted (not a tab switch)
+4. **Given** user is viewing session history records in the Log tab, **Then** those records have no delete action — they are read-only in this feature
 
 ---
 
@@ -135,7 +147,7 @@ A user enables vim mode expecting standard vim keybindings (`hjkl` navigation, `
 ### Edge Cases
 
 - What happens when the user presses `Delete`/`Backspace` while in an input field (todo text entry)? The character before the cursor should be deleted from the input, not the whole todo.
-- What happens when vim mode is enabled and the user types `d` — the app must not switch tabs. It must wait for the second character to form a command (`dd`) or time out.
+- What happens when vim mode is enabled and the user types `d` — the app must not switch tabs. It must wait up to **1 second** for the second character to form a command (`dd`). If no second `d` arrives within 1 second, the partial command is silently discarded and input resets to normal.
 - What if the settings file exists but is missing specific keys (partial config)? Missing keys should fall back to defaults, not crash.
 - What if the user resizes the terminal while the timer is frozen after session end? The frozen time value should remain correct.
 - What if two sessions end simultaneously (edge case in timer)? Only one timer tick should be applied per second regardless.
@@ -146,27 +158,27 @@ A user enables vim mode expecting standard vim keybindings (`hjkl` navigation, `
 
 ### Functional Requirements
 
-- **FR-001**: The `Delete` key (macOS) and `Backspace` key (Linux/Windows) MUST trigger item deletion in the Log tab and Dashboard todo list
+- **FR-001**: The `Delete` key (macOS) and `Backspace` key (Linux/Windows) MUST trigger todo item deletion in the Log tab (todo sub-panel) and Dashboard todo list; session history records in the Log tab are read-only and not affected
 - **FR-002**: The `d` key MUST be reserved exclusively for tab navigation to Dashboard and MUST NOT trigger deletion in any context
 - **FR-003**: Users MUST be able to delete todos from the Dashboard panel using `Delete`/`Backspace`
 - **FR-004**: Todo deletion MUST be permanent — the todo MUST NOT reappear after app restart
 - **FR-005**: The flip-clock timer digits MUST use solid block characters (no box-drawing rounded corners)
 - **FR-006**: The timer display MUST remain unchanged (frozen) after a Pomodoro or work session ends
 - **FR-007**: The timer MUST reset to zero only when a new session is explicitly started
-- **FR-008**: All user settings (vim mode, theme) MUST be persisted to a local configuration file on change
+- **FR-008**: All user settings (vim mode, theme) MUST be persisted to a local configuration file **immediately on change** (not deferred to app exit)
 - **FR-009**: Settings MUST be loaded from the configuration file on every app startup
 - **FR-010**: If no configuration file exists, the app MUST create one with default values silently
-- **FR-011**: Users MUST be able to set a custom theme via a CLI command (`focus config set theme <name>`)
+- **FR-011**: Users MUST be able to set a custom theme via `focus config set theme <name>` and toggle vim mode via `focus config set vim-mode true/false`
 - **FR-012**: The manually selected theme MUST take precedence over OS auto-detection
 - **FR-013**: Attempting to set an invalid theme name MUST display an error listing valid theme names
 - **FR-014**: Vim mode MUST support navigation commands: `j` (down), `k` (up), `gg` (top), `G` (bottom)
-- **FR-015**: Vim mode MUST support `dd` to delete the selected item (same outcome as `Delete`/`Backspace`)
-- **FR-016**: Vim mode state MUST be isolated from normal mode — `d` in vim mode MUST NOT trigger tab navigation
+- **FR-015**: Vim mode MUST support `dd` to delete the selected todo item (same outcome as `Delete`/`Backspace`)
+- **FR-016**: Vim mode state MUST be isolated from normal mode — a single `d` keypress in vim mode MUST NOT trigger tab navigation; it starts a 1-second command window waiting for a second `d`; if not received within 1 second, the partial command is discarded
 - **FR-017**: In any text input field, `Backspace`/`Delete` MUST delete the preceding character, not the todo item
 
 ### Key Entities
 
-- **UserSettings**: Persisted configuration containing `vim_mode: bool` and `theme: String`; stored in a well-known local path; loaded at startup, saved on change
+- **UserSettings**: Persisted configuration containing `vim_mode: bool` and `theme: String`; stored in a well-known local path; loaded at startup, saved **immediately on every change** (not deferred to exit)
 - **TodoItem**: An actionable task with unique identifier, text content, and state; can be permanently deleted
 - **Theme**: A named visual style (`dark`, `light`, `material`, `onedark`) that controls all color rendering; has a fixed list of valid names
 - **PomodoroTimer**: Tracks elapsed time for a work/break session; transitions to frozen state when session ends; resets only on explicit new session start
@@ -179,8 +191,8 @@ A user enables vim mode expecting standard vim keybindings (`hjkl` navigation, `
 
 - **SC-001**: Users can delete a todo or log entry in under 2 keystrokes without triggering unintended navigation
 - **SC-002**: After any session ends, the timer display shows the correct frozen elapsed time within 1 second and does not increment further
-- **SC-003**: 100% of user settings (vim mode, theme) are preserved across 10 consecutive app restarts without re-entry
-- **SC-004**: Users can select any of the 4 available themes via a single command and see it applied immediately on next startup
+- **SC-003**: 100% of user settings (vim mode, theme) are preserved across 10 consecutive app restarts without re-entry; settings are confirmed written to disk within 500ms of each change
+- **SC-004**: Users can select any of the 4 available themes via `focus config set theme <name>` and toggle vim mode via `focus config set vim-mode true/false`; changes take effect on next startup
 - **SC-005**: All vim navigation commands (`j`, `k`, `gg`, `G`, `dd`) work correctly across all panels when vim mode is enabled
 - **SC-006**: No keyboard shortcut conflicts exist — every key combination has exactly one unambiguous meaning per context
 - **SC-007**: Timer digit rendering is visually consistent across all supported terminal emulators with no character artifacts
@@ -194,7 +206,7 @@ A user enables vim mode expecting standard vim keybindings (`hjkl` navigation, `
 - The `Delete` key on macOS generates a distinct key code from `Backspace`; the platform detection chooses the appropriate binding
 - There are exactly 4 built-in themes; custom user-defined themes are out of scope for this feature
 - Vim mode `dd` shares the same deletion outcome as `Delete`/`Backspace` — no separate confirmation prompt
-- Log entry deletion refers to session log entries (not todo items); todo deletion refers to items in the todo panel
+- **Session history records in the Log tab are read-only** — only todo items can be deleted; this feature does not add session record deletion
 - A "frozen timer" means the display stops incrementing but the final value remains visible; it does not hide or reset
-- Settings write failures (e.g., disk full) surface as a non-fatal warning message, not a crash
-- The `focus config set theme` CLI command is the primary way to change themes; in-TUI settings panel is a stretch goal
+- Settings write failures (e.g., disk full) surface as a non-fatal warning message, not a crash; the in-memory setting remains active for the session
+- The `focus config set theme <name>` and `focus config set vim-mode true/false` CLI commands are the primary way to change persisted settings; an in-TUI settings panel is a stretch goal outside this feature's scope
