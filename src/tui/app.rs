@@ -8,6 +8,18 @@ use crate::pomodoro::timer::PomodoroTimer;
 use crate::tui::keyboard::{KeyContext, KeyHandler};
 use crate::tui::report::ReportMetrics;
 
+// ── Vim input mode ─────────────────────────────────────────────────────────────
+
+/// Tracks which vim sub-mode is active during todo text input.
+/// Only meaningful when `app.todo_input_mode && app.config.vim_mode`.
+#[derive(Debug, Clone, PartialEq)]
+pub enum VimInputMode {
+    /// Normal mode: motion keys, 'i'/'a' to enter insert.
+    Normal,
+    /// Insert mode: printable chars are inserted; Esc returns to Normal.
+    Insert,
+}
+
 // ── Time window ────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq)]
@@ -178,6 +190,11 @@ pub struct App {
     pub selected_todo_idx: Option<usize>,
     pub todo_input_mode: bool,
     pub todo_input_buffer: String,
+    /// Cursor position (byte index) within `todo_input_buffer`.
+    pub todo_cursor_pos: usize,
+    /// Current vim sub-mode for todo text input (Normal or Insert).
+    /// Only meaningful when `todo_input_mode && config.vim_mode`.
+    pub vim_input_mode: VimInputMode,
     // Keyboard handler for context-aware input routing
     pub keyboard_handler: KeyHandler,
     /// Currently focused dashboard panel index (0=Timer/Pomodoro, 1=TODOs, 2=Report).
@@ -221,6 +238,8 @@ impl App {
             selected_todo_idx: None,
             todo_input_mode: false,
             todo_input_buffer: String::new(),
+            todo_cursor_pos: 0,
+            vim_input_mode: VimInputMode::Normal,
             keyboard_handler: KeyHandler::new(vim_mode),
             focused_panel_idx: None,
             report_metrics: ReportMetrics::default(),
@@ -356,6 +375,9 @@ impl App {
     pub fn enter_todo_input_mode(&mut self) {
         self.todo_input_mode = true;
         self.todo_input_buffer.clear();
+        self.todo_cursor_pos = 0;
+        // In vim mode start in Insert immediately (user pressed 'a' which is an insert action)
+        self.vim_input_mode = VimInputMode::Insert;
         self.keyboard_handler.set_context(KeyContext::Input);
     }
 
@@ -363,6 +385,8 @@ impl App {
     pub fn exit_todo_input_mode(&mut self) {
         self.todo_input_mode = false;
         self.todo_input_buffer.clear();
+        self.todo_cursor_pos = 0;
+        self.vim_input_mode = VimInputMode::Normal;
         self.keyboard_handler.set_context(KeyContext::Viewing);
     }
 
