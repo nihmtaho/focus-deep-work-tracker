@@ -118,8 +118,8 @@ fn render_tab_bar(frame: &mut Frame, app: &App, area: Rect) {
 
 fn render_overlay(frame: &mut Frame, app: &App, area: Rect) {
     match &app.overlay {
-        Overlay::Prompt { label, value, .. } => {
-            render_prompt_overlay(frame, area, label, value);
+        Overlay::Prompt { label, .. } => {
+            render_prompt_overlay(frame, app, label);
         }
         Overlay::ConfirmDelete { session_name, .. } => {
             render_confirm_delete_overlay(frame, area, session_name);
@@ -154,26 +154,48 @@ fn centered_rect(percent_x: u16, height: u16, area: Rect) -> Rect {
     }
 }
 
-fn render_prompt_overlay(frame: &mut Frame, area: Rect, label: &str, value: &str) {
-    let block_area = centered_rect(55, 5, area);
+fn render_prompt_overlay(frame: &mut Frame, app: &App, label: &str) {
+    let block_area = centered_rect(60, 7, frame.area());
     frame.render_widget(Clear, block_area);
 
-    let display_value = format!("{value}█");
-    let content = vec![
+    let ti = &app.prompt_input;
+    let (before, cursor_char, after) = ti.cursor_spans();
+
+    let cursor_style = if ti.vim_enabled {
+        match ti.vim_mode {
+            crate::tui::text_input::VimInputMode::Insert =>
+                Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD),
+            crate::tui::text_input::VimInputMode::Normal =>
+                Style::default().fg(Color::Black).bg(Color::Yellow).add_modifier(Modifier::BOLD),
+        }
+    } else {
+        Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD)
+    };
+
+    let mut lines = vec![
         Line::from(Span::styled(label, Style::default().fg(Color::Yellow))),
         Line::from(Span::raw("")),
-        Line::from(Span::styled(
-            &display_value,
-            Style::default().add_modifier(Modifier::BOLD),
-        )),
-        Line::from(Span::raw("")),
-        Line::from(Span::styled(
-            "[Enter] Confirm  [Esc] Cancel",
-            Style::default().fg(Color::DarkGray),
-        )),
+        Line::from(vec![
+            Span::styled(before, Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(&cursor_char, cursor_style),
+            Span::styled(after, Style::default().add_modifier(Modifier::BOLD)),
+        ]),
     ];
 
-    let widget = Paragraph::new(content)
+    if ti.vim_enabled {
+        lines.push(Line::from(Span::styled(
+            ti.mode_label(),
+            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+        )));
+    }
+
+    lines.push(Line::from(Span::raw("")));
+    lines.push(Line::from(Span::styled(
+        ti.hint(),
+        Style::default().fg(Color::DarkGray),
+    )));
+
+    let widget = Paragraph::new(lines)
         .block(
             Block::default()
                 .title(" Input ")
@@ -530,22 +552,18 @@ pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App, focused: bool)
 
     if app.todo_input_mode {
         // Build cursor-split display: text before cursor | cursor char | text after cursor
-        let buf = &app.todo_input_buffer;
-        let pos = app.todo_cursor_pos.min(buf.len());
-        let before = &buf[..pos];
-        let cursor_char = buf[pos..].chars().next().map(|c| c.to_string()).unwrap_or_else(|| " ".to_string());
-        let after_start = pos + buf[pos..].chars().next().map(|c| c.len_utf8()).unwrap_or(0);
-        let after = &buf[after_start..];
+        let ti = &app.todo_input;
+        let (before, cursor_char, after) = ti.cursor_spans();
 
         let (mode_label, title, cursor_style) = if app.config.vim_mode {
-            match app.vim_input_mode {
+            match ti.vim_mode {
                 crate::tui::app::VimInputMode::Insert => (
-                    "-- INSERT --",
+                    ti.mode_label(),
                     " Add TODO [INSERT] ",
                     Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD),
                 ),
                 crate::tui::app::VimInputMode::Normal => (
-                    "-- NORMAL --",
+                    ti.mode_label(),
                     " Add TODO [NORMAL] ",
                     Style::default().fg(Color::Black).bg(Color::Yellow).add_modifier(Modifier::BOLD),
                 ),
@@ -558,16 +576,7 @@ pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App, focused: bool)
             )
         };
 
-        let hint = if app.config.vim_mode {
-            match app.vim_input_mode {
-                crate::tui::app::VimInputMode::Insert =>
-                    "[Esc] normal  [Enter] save",
-                crate::tui::app::VimInputMode::Normal =>
-                    "[i] insert  [a] append  [A] end  [x] del  [w/b] word  [Enter] save  [Esc] cancel",
-            }
-        } else {
-            "[Enter] save  [Esc] cancel"
-        };
+        let hint = ti.hint();
 
         let mut content_lines = vec![
             Line::from(vec![
@@ -668,7 +677,7 @@ pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App, focused: bool)
 pub fn render_controls_zone(frame: &mut Frame, area: Rect, app: &App) {
     let help_text = if app.todo_input_mode {
         if app.config.vim_mode {
-            match app.vim_input_mode {
+            match app.todo_input.vim_mode {
                 crate::tui::app::VimInputMode::Insert =>
                     " -- INSERT --  [Esc] normal  [Enter] save ",
                 crate::tui::app::VimInputMode::Normal =>
@@ -715,9 +724,21 @@ fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
     };
 
     // ── Context hints ─────────────────────────────────────────────────────────
-    let hint = match &app.active_tab {
+    // Prompt overlay takes precedence over tab-based hints
+    let hint = if matches!(app.overlay, Overlay::Prompt { .. }) {
+        let ti = &app.prompt_input;
+        match (ti.vim_enabled, &ti.vim_mode) {
+            (true, crate::tui::text_input::VimInputMode::Normal) =>
+                "  -- NORMAL --  [i/a/A/I] insert  [h/l] move  [x] del  [D] del→end  [Enter] save  [Esc] cancel",
+            (true, crate::tui::text_input::VimInputMode::Insert) =>
+                "  -- INSERT --  type to edit  [Esc] → normal  [Enter] save",
+            _ =>
+                "  [Enter] confirm  [Esc] cancel",
+        }
+    } else {
+        match &app.active_tab {
         Tab::Dashboard if app.todo_input_mode => {
-            match (app.config.vim_mode, &app.vim_input_mode) {
+            match (app.config.vim_mode, &app.todo_input.vim_mode) {
                 (true, crate::tui::app::VimInputMode::Normal) =>
                     "  -- NORMAL --  [i] insert  [a] append  [A] end  [I] begin  [x] del  [w/b] word  [Enter] save  [Esc] cancel",
                 (true, crate::tui::app::VimInputMode::Insert) =>
@@ -744,6 +765,7 @@ fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
         Tab::Settings => {
             "  [↑↓] select row  [+/-] change value  [v] toggle vim  [?] help"
         }
+    }
     };
 
     // ── Layout: badge on left, hints fill the rest ────────────────────────────

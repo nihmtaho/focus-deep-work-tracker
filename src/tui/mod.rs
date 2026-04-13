@@ -3,6 +3,7 @@ pub mod events;
 pub mod handlers_todo;
 pub mod keyboard;
 pub mod report;
+pub mod text_input;
 pub mod themes;
 pub mod timer_display;
 pub mod ui;

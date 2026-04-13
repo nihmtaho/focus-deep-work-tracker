@@ -7,18 +7,10 @@ use crate::pomodoro::config::PomodoroConfig;
 use crate::pomodoro::timer::PomodoroTimer;
 use crate::tui::keyboard::{KeyContext, KeyHandler};
 use crate::tui::report::ReportMetrics;
+use crate::tui::text_input::TextInput;
 
-// ── Vim input mode ─────────────────────────────────────────────────────────────
-
-/// Tracks which vim sub-mode is active during todo text input.
-/// Only meaningful when `app.todo_input_mode && app.config.vim_mode`.
-#[derive(Debug, Clone, PartialEq)]
-pub enum VimInputMode {
-    /// Normal mode: motion keys, 'i'/'a' to enter insert.
-    Normal,
-    /// Insert mode: printable chars are inserted; Esc returns to Normal.
-    Insert,
-}
+// Re-export so existing callers (ui.rs) can use `app::VimInputMode`.
+pub use crate::tui::text_input::VimInputMode;
 
 // ── Time window ────────────────────────────────────────────────────────────────
 
@@ -115,7 +107,6 @@ pub enum Overlay {
     None,
     Prompt {
         label: String,
-        value: String,
         action: PromptAction,
     },
     ConfirmDelete {
@@ -189,12 +180,10 @@ pub struct App {
     pub todos: Vec<Todo>,
     pub selected_todo_idx: Option<usize>,
     pub todo_input_mode: bool,
-    pub todo_input_buffer: String,
-    /// Cursor position (byte index) within `todo_input_buffer`.
-    pub todo_cursor_pos: usize,
-    /// Current vim sub-mode for todo text input (Normal or Insert).
-    /// Only meaningful when `todo_input_mode && config.vim_mode`.
-    pub vim_input_mode: VimInputMode,
+    /// Vim-aware text input state for the todo add field.
+    pub todo_input: TextInput,
+    /// Vim-aware text input state for overlay prompt fields (session name, tag, rename).
+    pub prompt_input: TextInput,
     // Keyboard handler for context-aware input routing
     pub keyboard_handler: KeyHandler,
     /// Currently focused dashboard panel index (0=Timer/Pomodoro, 1=TODOs, 2=Report).
@@ -237,9 +226,8 @@ impl App {
             todos: Vec::new(),
             selected_todo_idx: None,
             todo_input_mode: false,
-            todo_input_buffer: String::new(),
-            todo_cursor_pos: 0,
-            vim_input_mode: VimInputMode::Normal,
+            todo_input: TextInput::new(vim_mode),
+            prompt_input: TextInput::new(vim_mode),
             keyboard_handler: KeyHandler::new(vim_mode),
             focused_panel_idx: None,
             report_metrics: ReportMetrics::default(),
@@ -371,23 +359,33 @@ impl App {
         session_store::count_completed(conn)
     }
 
-    /// Enter TODO input mode: set keyboard context to Input and clear buffer for new entry
+    /// Enter TODO input mode: set keyboard context to Input and reset todo_input.
     pub fn enter_todo_input_mode(&mut self) {
         self.todo_input_mode = true;
-        self.todo_input_buffer.clear();
-        self.todo_cursor_pos = 0;
-        // In vim mode start in Insert immediately (user pressed 'a' which is an insert action)
-        self.vim_input_mode = VimInputMode::Insert;
+        self.todo_input.set_vim_enabled(self.config.vim_mode);
+        self.todo_input.reset();
         self.keyboard_handler.set_context(KeyContext::Input);
     }
 
-    /// Exit TODO input mode: set keyboard context to Viewing and clear buffer
+    /// Exit TODO input mode: set keyboard context to Viewing and reset todo_input.
     pub fn exit_todo_input_mode(&mut self) {
         self.todo_input_mode = false;
-        self.todo_input_buffer.clear();
-        self.todo_cursor_pos = 0;
-        self.vim_input_mode = VimInputMode::Normal;
+        self.todo_input.reset();
         self.keyboard_handler.set_context(KeyContext::Viewing);
+    }
+
+    /// Open a Prompt overlay and prepare prompt_input (reset or pre-fill).
+    pub fn open_prompt(&mut self, label: impl Into<String>, initial: &str, action: PromptAction) {
+        self.prompt_input.set_vim_enabled(self.config.vim_mode);
+        if initial.is_empty() {
+            self.prompt_input.reset();
+        } else {
+            self.prompt_input.set_value(initial);
+        }
+        self.overlay = Overlay::Prompt {
+            label: label.into(),
+            action,
+        };
     }
 
     /// Returns true when a Pomodoro session is currently active (timer is running).
