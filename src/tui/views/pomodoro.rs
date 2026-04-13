@@ -194,7 +194,11 @@ fn render_bottom_info(
         task_spans.push(Span::styled("  #", Style::default().fg(Color::DarkGray)));
         task_spans.push(Span::styled(
             tag.clone(),
-            Style::default().fg(if no_color { Color::Reset } else { Color::Magenta }),
+            Style::default().fg(if no_color {
+                Color::Reset
+            } else {
+                Color::Magenta
+            }),
         ));
     }
     let task_line = Line::from(task_spans);
@@ -229,7 +233,7 @@ fn next_phase_text(timer: &PomodoroTimer) -> String {
     match timer.phase {
         PomodoroPhase::Work => {
             let n = cfg.long_break_after.max(1);
-            if (timer.completed_work + 1) % n == 0 {
+            if (timer.completed_work + 1).is_multiple_of(n) {
                 format!("Next: {}m long break", cfg.long_break_duration_mins)
             } else {
                 format!("Next: {}m break", cfg.break_duration_mins)
