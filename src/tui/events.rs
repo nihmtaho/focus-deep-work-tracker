@@ -218,6 +218,36 @@ pub fn handle_overlay_prompt(
                     app.overlay = Overlay::None;
                     app.message = Some(MessageOverlay::success("Pomodoro started!"));
                 }
+                PromptAction::StartSessionFromTodo { task, todo_id } => {
+                    let tag_opt = if value.is_empty() { None } else { Some(value) };
+                    match session_store::get_active_session(conn)? {
+                        Some(existing) => {
+                            let elapsed = format_elapsed(existing.start_time);
+                            app.message = Some(MessageOverlay::error(
+                                FocusError::AlreadyRunning {
+                                    task: existing.task,
+                                    elapsed,
+                                }
+                                .to_string(),
+                            ));
+                        }
+                        None => {
+                            session_store::insert_session_with_todo(
+                                conn,
+                                &task,
+                                tag_opt.as_deref(),
+                                Some(todo_id),
+                            )?;
+                            crate::models::todo::update_status(conn, todo_id, "completed")?;
+                            app.load_todos(conn)?;
+                            app.message = Some(MessageOverlay::success(format!(
+                                "Started session for: \"{task}\""
+                            )));
+                            let _ = app.load_dashboard(conn);
+                        }
+                    }
+                    app.overlay = Overlay::None;
+                }
             }
         }
     }
@@ -1349,5 +1379,20 @@ mod tests {
         // Without vim mode, 'g' falls through to todo handler which ignores it
         handle_dashboard_tab(&mut app, &conn, make_key(KeyCode::Char('g'))).unwrap();
         assert_eq!(app.selected_todo_idx, Some(0)); // unchanged
+    }
+
+    #[test]
+    fn right_arrow_on_todo_opens_tag_prompt_not_mode_selector() {
+        let (conn, _f) = test_conn();
+        crate::models::todo::insert(&conn, "write tests").unwrap();
+        let mut app = make_app();
+        app.load_todos(&conn).unwrap();
+        app.selected_todo_idx = Some(0);
+        handle_dashboard_tab(&mut app, &conn, make_key(KeyCode::Right)).unwrap();
+        assert!(
+            matches!(app.overlay, Overlay::Prompt { .. }),
+            "expected Prompt overlay, got {:?}",
+            app.overlay
+        );
     }
 }

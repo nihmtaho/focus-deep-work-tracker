@@ -5,7 +5,7 @@ use crate::models::session::Session;
 use crate::models::todo::Todo;
 use crate::pomodoro::config::PomodoroConfig;
 use crate::pomodoro::timer::PomodoroTimer;
-use crate::tui::keyboard::{KeyHandler};
+use crate::tui::keyboard::KeyHandler;
 use crate::tui::report::ReportMetrics;
 use crate::tui::text_input::TextInput;
 
@@ -89,6 +89,11 @@ pub enum PromptAction {
     /// Second step for Pomodoro: entering optional tag.
     StartPomodoroTag {
         task: String,
+    },
+    /// Direct TODO→session: skip ModeSelector, enter optional tag (pre-filled with todo title).
+    StartSessionFromTodo {
+        task: String,
+        todo_id: u64,
     },
 }
 
@@ -234,8 +239,8 @@ impl App {
 
     /// Load/refresh dashboard data from the database.
     pub fn load_dashboard(&mut self, conn: &rusqlite::Connection) -> anyhow::Result<()> {
-        use crate::db::time::today_start;
         use crate::db::session_store;
+        use crate::db::time::today_start;
 
         self.active_session = session_store::get_active_session(conn)?;
         self.today_sessions = session_store::list_completed_since(conn, today_start())?;
@@ -280,8 +285,8 @@ impl App {
 
     /// Tick update for Dashboard tab (refreshes active session timer).
     pub fn tick_dashboard(&mut self, conn: &rusqlite::Connection) -> anyhow::Result<()> {
-        use crate::db::time::today_start;
         use crate::db::session_store;
+        use crate::db::time::today_start;
         self.active_session = session_store::get_active_session(conn)?;
         self.today_sessions = session_store::list_completed_since(conn, today_start())?;
         if let Some(ref msg) = self.message {
