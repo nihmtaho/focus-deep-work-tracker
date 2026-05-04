@@ -46,7 +46,7 @@ enum Commands {
         #[arg(short = 'n', long, default_value = "10")]
         limit: u32,
     },
-    /// Show time aggregated by tag
+    /// Show time aggregated by tag (or Pomodoro statistics with --pomo)
     Report {
         /// Show today's sessions only
         #[arg(long, conflicts_with = "week")]
@@ -54,21 +54,15 @@ enum Commands {
         /// Show last 7 rolling days
         #[arg(long, conflicts_with = "today")]
         week: bool,
+        /// Show pomodoro statistics instead of session report
+        #[arg(long, help = "Show pomodoro statistics")]
+        pomo: bool,
     },
     /// Export all session history to stdout
     Export {
         /// Output format: json or markdown
         #[arg(short, long)]
         format: String,
-    },
-    /// Show Pomodoro statistics
-    PomoStats {
-        /// Show today's statistics (default)
-        #[arg(long, conflicts_with = "week")]
-        today: bool,
-        /// Show past 7 days as a daily breakdown
-        #[arg(long, conflicts_with = "today")]
-        week: bool,
     },
     /// Get or set persistent configuration
     Config {
@@ -134,9 +128,14 @@ fn run(cli: Cli) -> Result<()> {
         Commands::Stop => commands::stop::run(&conn)?,
         Commands::Status => commands::status::run(&conn)?,
         Commands::Log { limit } => commands::log::run(&conn, limit)?,
-        Commands::Report { today, week } => commands::report::run(&conn, today, week)?,
+        Commands::Report { today, week, pomo } => {
+            if pomo {
+                commands::pomo_stats::run(&conn, today, week)?;
+            } else {
+                commands::report::run(&conn, today, week)?;
+            }
+        }
         Commands::Export { format } => commands::export::run(&conn, format)?,
-        Commands::PomoStats { today, week } => commands::pomo_stats::run(&conn, today, week)?,
         Commands::Config { action } => match action {
             ConfigAction::Get { key } => commands::config::run_get(&key)?,
             ConfigAction::Set { key, value } => commands::config::run_set(&key, &value)?,
