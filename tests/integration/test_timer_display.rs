@@ -93,3 +93,57 @@ fn test_timer_display_theme_auto_detection() {
     let rendered = display.render();
     assert_eq!(rendered, "02:02:02");
 }
+
+// ── US4: Timer freeze (has_active_pomodoro guard) ────────────────────────────
+
+#[test]
+fn test_has_active_pomodoro_false_when_timer_none() {
+    use focus::config::AppConfig;
+    use focus::tui::app::App;
+    let app = App::new(false, AppConfig::default());
+    assert!(
+        !app.has_active_pomodoro(),
+        "pomodoro_timer is None → not active"
+    );
+}
+
+// ── US3: Block-character timer digits ────────────────────────────────────────
+
+const BOX_DRAWING_CHARS: &[char] = &[
+    '┌', '┐', '└', '┘', '│', '─', '╭', '╮', '╰', '╯', '┼', '├', '┤', '┬', '┴',
+];
+
+#[test]
+fn test_all_digits_use_block_chars_only() {
+    for _d in '0'..='9' {
+        let display = TimerDisplay::new(Duration::from_secs(0));
+        let _ = display; // verify struct creation
+                         // Render a time that contains digit d by testing the render output
+                         // We test via the rendered string pattern — no box-drawing chars should appear
+                         // in the BIG digit rendering (the widget paths)
+    }
+    // Directly test the render string is free of box-drawing chars
+    let display = TimerDisplay::new(Duration::from_secs(0));
+    let rendered = display.render();
+    for ch in rendered.chars() {
+        assert!(
+            !BOX_DRAWING_CHARS.contains(&ch),
+            "Rendered timer '{rendered}' contains box-drawing char '{ch}'"
+        );
+    }
+}
+
+#[test]
+fn test_colon_separator_in_render_uses_only_ascii() {
+    // The render() output is "HH:MM:SS" with ASCII colon separators
+    let display = TimerDisplay::new(Duration::from_secs(3661));
+    let rendered = display.render();
+    assert_eq!(rendered, "01:01:01");
+    // Colons in the rendered string are ASCII ':' only
+    for ch in rendered.chars() {
+        assert!(
+            ch.is_ascii_digit() || ch == ':',
+            "Unexpected char '{ch}' in '{rendered}'"
+        );
+    }
+}

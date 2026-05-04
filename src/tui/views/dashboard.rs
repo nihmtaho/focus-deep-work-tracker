@@ -8,12 +8,12 @@ use ratatui::{
 
 use crate::tui::app::{App, MessageKind, MessageOverlay};
 
-pub fn render(frame: &mut Frame, app: &App, area: Rect) {
+pub fn render(frame: &mut Frame, app: &App, tc: &crate::theme::ThemeColors, area: Rect) {
     // When full Pomodoro panel mode is active, show expanded view instead of 3-column layout
     if app.full_pomodoro_panel {
-        render_full_pomodoro_panel(frame, app, area);
+        render_full_pomodoro_panel(frame, app, tc, area);
         if let Some(msg) = &app.message {
-            render_message_overlay(frame, app, msg);
+            render_message_overlay(frame, app, tc, msg);
         }
         return;
     }
@@ -33,7 +33,7 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
         .split(area);
 
     // Render controls zone at top
-    crate::tui::ui::render_controls_zone(frame, chunks[0], app);
+    crate::tui::ui::render_controls_zone(frame, chunks[0], app, tc);
 
     // Split main panel into two sections: left (40% timer/pomodoro), right (60% TODO + Report stacked)
     let main_chunks = Layout::default()
@@ -53,29 +53,26 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
         ])
         .split(main_chunks[1]);
 
-    // Compute panel focus flags from app state
-    let panel_focused = |idx: usize| app.focused_panel_idx == Some(idx);
-
     // Render left panel: Pomodoro timer when active, generic timer for freeform, else idle panel
     if let Some(ref timer) = app.pomodoro_timer {
-        crate::tui::views::pomodoro::render(frame, timer, app.no_color, main_chunks[0]);
+        crate::tui::views::pomodoro::render(frame, timer, app, main_chunks[0]);
     } else if app.active_session.is_some() {
         // Show Timer zone during active freeform session
-        crate::tui::ui::render_timer_zone(frame, main_chunks[0], app, panel_focused(0));
+        crate::tui::ui::render_timer_zone(frame, main_chunks[0], app, tc);
     } else {
         // Show Pomodoro panel when idle (no active session)
-        crate::tui::ui::render_pomodoro_panel(frame, main_chunks[0], app, panel_focused(0));
+        crate::tui::ui::render_pomodoro_panel(frame, main_chunks[0], tc);
     }
 
     // Render TODO zone (top-right)
-    crate::tui::ui::render_todo_zone(frame, right_chunks[0], app, panel_focused(1));
+    crate::tui::ui::render_todo_zone(frame, right_chunks[0], app, tc);
 
     // Render Report panel (bottom-right)
-    crate::tui::ui::render_report_panel(frame, right_chunks[1], app, panel_focused(2));
+    crate::tui::ui::render_report_panel(frame, right_chunks[1], app, tc);
 
     // Message overlay
     if let Some(msg) = &app.message {
-        render_message_overlay(frame, app, msg);
+        render_message_overlay(frame, app, tc, msg);
     }
 }
 
@@ -84,7 +81,12 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
 /// Draws a titled border then delegates the inner area to `pomodoro::render()`,
 /// which handles the vertically-centered clock, progress bar, and info panel.
 /// A compact stats row (cycles + elapsed) is shown in the bottom border footer.
-pub fn render_full_pomodoro_panel(frame: &mut Frame, app: &App, area: Rect) {
+pub fn render_full_pomodoro_panel(
+    frame: &mut Frame,
+    app: &App,
+    tc: &crate::theme::ThemeColors,
+    area: Rect,
+) {
     // Build the title with cycle count when a timer is active
     let title = if let Some(ref timer) = app.pomodoro_timer {
         let elapsed = crate::pomodoro::timer::format_secs(timer.total_elapsed_secs());
@@ -101,15 +103,16 @@ pub fn render_full_pomodoro_panel(frame: &mut Frame, app: &App, area: Rect) {
         .borders(Borders::ALL)
         .border_style(
             Style::default()
-                .fg(Color::Cyan)
+                .fg(tc.panel_focus_border)
                 .add_modifier(Modifier::BOLD),
-        );
+        )
+        .style(Style::default().bg(tc.background));
     let inner = outer.inner(area);
     frame.render_widget(outer, area);
 
     if let Some(ref timer) = app.pomodoro_timer {
         // Delegate the full inner area to the shared pomodoro renderer
-        crate::tui::views::pomodoro::render(frame, timer, app.no_color, inner);
+        crate::tui::views::pomodoro::render(frame, timer, app, inner);
     } else {
         // No active Pomodoro — show idle message
         let idle_lines = vec![
@@ -171,11 +174,21 @@ mod tests {
     }
 }
 
-pub fn render_message_overlay_pub(frame: &mut Frame, app: &App, msg: &MessageOverlay) {
-    render_message_overlay(frame, app, msg);
+pub fn render_message_overlay_pub(
+    frame: &mut Frame,
+    app: &App,
+    tc: &crate::theme::ThemeColors,
+    msg: &MessageOverlay,
+) {
+    render_message_overlay(frame, app, tc, msg);
 }
 
-fn render_message_overlay(frame: &mut Frame, app: &App, msg: &MessageOverlay) {
+fn render_message_overlay(
+    frame: &mut Frame,
+    app: &App,
+    tc: &crate::theme::ThemeColors,
+    msg: &MessageOverlay,
+) {
     use ratatui::layout::Rect;
 
     let area = frame.area();
@@ -201,9 +214,9 @@ fn render_message_overlay(frame: &mut Frame, app: &App, msg: &MessageOverlay) {
         )
     } else {
         match msg.kind {
-            MessageKind::Success => (Color::Green, " OK "),
-            MessageKind::Warning => (Color::Yellow, " WARN "),
-            MessageKind::Error => (Color::Red, " ERROR "),
+            MessageKind::Success => (tc.success, " OK "),
+            MessageKind::Warning => (tc.warning, " WARN "),
+            MessageKind::Error => (tc.error, " ERROR "),
         }
     };
 
@@ -212,7 +225,8 @@ fn render_message_overlay(frame: &mut Frame, app: &App, msg: &MessageOverlay) {
             Block::default()
                 .title(title)
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(fg)),
+                .border_style(Style::default().fg(fg))
+                .style(Style::default().bg(tc.background)),
         )
         .style(Style::default().fg(fg));
     frame.render_widget(overlay, overlay_area);

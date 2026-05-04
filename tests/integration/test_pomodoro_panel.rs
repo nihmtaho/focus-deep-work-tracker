@@ -120,3 +120,62 @@ fn test_full_pomodoro_panel_resets_on_esc_simulation() {
         "Esc/Q must exit full Pomodoro panel"
     );
 }
+
+// ── Issue #13: Timer freeze verification ─────────────────────────────────────
+
+#[test]
+fn test_freeform_timer_display_driven_by_active_session() {
+    // Verifies the state condition: render_timer_zone shows "--:--:--" when
+    // active_session is None, which is what happens after stop_session().
+    use focus::config::AppConfig;
+    use focus::tui::app::App;
+    let app = App::new(false, AppConfig::default());
+    assert!(
+        app.active_session.is_none(),
+        "Fresh app must have no active session → timer shows --:--:--"
+    );
+}
+
+#[test]
+fn test_pomodoro_timer_none_means_tick_guard_skips() {
+    // has_active_pomodoro() = false → mod.rs tick guard skips timer.tick_secs()
+    use focus::config::AppConfig;
+    use focus::tui::app::App;
+    let app = App::new(false, AppConfig::default());
+    assert!(
+        !app.has_active_pomodoro(),
+        "No pomodoro timer → has_active_pomodoro() false → tick guard inactive"
+    );
+}
+
+#[test]
+fn test_tick_dashboard_clears_active_session_after_stop() {
+    use focus::config::AppConfig;
+    use focus::db::open_db_at;
+    use focus::tui::app::App;
+    use tempfile::NamedTempFile;
+
+    let f = NamedTempFile::new().unwrap();
+    let conn = open_db_at(f.path()).unwrap();
+    let mut app = App::new(false, AppConfig::default());
+
+    // Insert an active session
+    let now = chrono::Utc::now().timestamp();
+    conn.execute(
+        "INSERT INTO sessions (task, tag, start_time) VALUES ('test', NULL, ?1)",
+        [now - 30],
+    )
+    .unwrap();
+    app.load_dashboard(&conn).unwrap();
+    assert!(app.active_session.is_some(), "session loaded from DB");
+
+    // End the session (writes end_time to DB)
+    focus::db::session_store::stop_session(&conn).unwrap();
+
+    // tick_dashboard re-reads from DB → active_session = None → timer shows --:--:--
+    app.tick_dashboard(&conn).unwrap();
+    assert!(
+        app.active_session.is_none(),
+        "After stop_session + tick_dashboard, active_session must be None"
+    );
+}

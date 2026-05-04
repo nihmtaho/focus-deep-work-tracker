@@ -26,7 +26,7 @@ fn test_context_switching() {
 
 #[test]
 fn test_letter_shortcuts_in_viewing_mode() {
-    let handler = KeyHandler::new(false);
+    let mut handler = KeyHandler::new(false);
 
     let d_event = create_key_event(KeyCode::Char('d'));
     assert_eq!(
@@ -57,7 +57,7 @@ fn test_esc_cancels_input() {
 
 #[test]
 fn test_letter_shortcuts_navigation_dashboard() {
-    let handler = KeyHandler::new(false);
+    let mut handler = KeyHandler::new(false);
     let d_event = create_key_event(KeyCode::Char('d'));
     let action = handler.handle_key(d_event);
     assert_eq!(action, KeyAction::NavigateTab(TabTarget::Dashboard));
@@ -65,7 +65,7 @@ fn test_letter_shortcuts_navigation_dashboard() {
 
 #[test]
 fn test_letter_shortcuts_navigation_sessions() {
-    let handler = KeyHandler::new(false);
+    let mut handler = KeyHandler::new(false);
     let s_event = create_key_event(KeyCode::Char('s'));
     let action = handler.handle_key(s_event);
     assert_eq!(action, KeyAction::NavigateTab(TabTarget::Sessions));
@@ -73,7 +73,7 @@ fn test_letter_shortcuts_navigation_sessions() {
 
 #[test]
 fn test_letter_shortcuts_navigation_todos() {
-    let handler = KeyHandler::new(false);
+    let mut handler = KeyHandler::new(false);
     let t_event = create_key_event(KeyCode::Char('t'));
     let action = handler.handle_key(t_event);
     assert_eq!(action, KeyAction::NavigateTab(TabTarget::TODOs));
@@ -81,7 +81,7 @@ fn test_letter_shortcuts_navigation_todos() {
 
 #[test]
 fn test_letter_shortcuts_rapid_navigation() {
-    let handler = KeyHandler::new(false);
+    let mut handler = KeyHandler::new(false);
 
     // Simulate rapid key presses: d -> s -> t -> d
     let actions = vec![
@@ -119,14 +119,14 @@ fn test_letter_shortcuts_disabled_in_input_mode() {
 
 #[test]
 fn test_letter_shortcuts_vim_mode_navigation_still_works() {
-    let handler = KeyHandler::new(true); // vim_mode enabled
+    let mut handler = KeyHandler::new(true); // vim_mode enabled
 
-    // Letter shortcuts like 'd' should still navigate even with vim mode enabled
-    // because they are context shortcuts, not movement keys
+    // In vim mode, 'd' starts dd command composition — does NOT navigate to Dashboard.
+    // This is per spec FR-016: single 'd' in vim mode must not trigger tab navigation.
     let d_event = create_key_event(KeyCode::Char('d'));
     assert_eq!(
         handler.handle_key(d_event),
-        KeyAction::NavigateTab(TabTarget::Dashboard)
+        KeyAction::None // waiting for second 'd'
     );
 
     // Vim mode hjkl should still work
@@ -138,7 +138,7 @@ fn test_letter_shortcuts_vim_mode_navigation_still_works() {
 
 #[test]
 fn test_number_shortcuts_focus_panels() {
-    let handler = KeyHandler::new(false);
+    let mut handler = KeyHandler::new(false);
 
     // 1/2/3 map to FocusPanel(0/1/2) in viewing mode
     assert_eq!(
@@ -157,7 +157,7 @@ fn test_number_shortcuts_focus_panels() {
 
 #[test]
 fn test_panel_focus_out_of_range_ignored() {
-    let handler = KeyHandler::new(false);
+    let mut handler = KeyHandler::new(false);
 
     // 4+ returns None — out-of-range panel indices are not focused
     assert_eq!(
@@ -187,7 +187,7 @@ fn test_panel_focus_disabled_in_input_mode() {
 
 #[test]
 fn test_vim_keys_hjkl_map_when_vim_mode_enabled() {
-    let handler = KeyHandler::new(true);
+    let mut handler = KeyHandler::new(true);
 
     assert_eq!(
         handler.handle_key(create_key_event(KeyCode::Char('h'))),
@@ -211,7 +211,7 @@ fn test_vim_keys_hjkl_map_when_vim_mode_enabled() {
 
 #[test]
 fn test_vim_keys_ignored_when_vim_mode_disabled() {
-    let handler = KeyHandler::new(false);
+    let mut handler = KeyHandler::new(false);
 
     // hjkl should not produce navigation actions when vim_mode=false
     assert_eq!(
@@ -237,7 +237,7 @@ fn test_vim_keys_ignored_when_vim_mode_disabled() {
 
 #[test]
 fn test_vim_mode_hjkl_navigation_in_viewing_context() {
-    let handler = KeyHandler::new(true);
+    let mut handler = KeyHandler::new(true);
 
     // All four directions should work via hjkl
     let left = handler.handle_key(create_key_event(KeyCode::Char('h')));
@@ -253,7 +253,7 @@ fn test_vim_mode_hjkl_navigation_in_viewing_context() {
 
 #[test]
 fn test_arrow_keys_navigation_when_vim_mode_disabled() {
-    let handler = KeyHandler::new(false);
+    let mut handler = KeyHandler::new(false);
 
     assert_eq!(
         handler.handle_key(create_key_event(KeyCode::Left)),
@@ -293,4 +293,106 @@ fn test_vim_keys_disabled_in_input_context() {
             ),
         }
     }
+}
+
+// ── US1: Delete Key Conflict Resolution ─────────────────────────────────────
+
+#[test]
+fn test_delete_key_emits_delete_item_action() {
+    let mut handler = KeyHandler::new(false);
+    let event = create_key_event(KeyCode::Delete);
+    assert_eq!(handler.handle_key(event), KeyAction::DeleteItem);
+}
+
+#[test]
+fn test_backspace_key_emits_delete_item_action() {
+    let mut handler = KeyHandler::new(false);
+    let event = create_key_event(KeyCode::Backspace);
+    assert_eq!(handler.handle_key(event), KeyAction::DeleteItem);
+}
+
+#[test]
+fn test_d_key_always_navigates_to_dashboard_in_normal_mode() {
+    // d must navigate regardless of context; no delete action
+    let mut handler = KeyHandler::new(false);
+    let event = create_key_event(KeyCode::Char('d'));
+    assert_eq!(
+        handler.handle_key(event),
+        KeyAction::NavigateTab(TabTarget::Dashboard)
+    );
+}
+
+#[test]
+fn test_delete_key_in_input_context_is_input_keypress() {
+    // In Input context, Backspace edits the text field, not deletes the todo
+    let mut handler = KeyHandler::new(false);
+    handler.set_context(KeyContext::Input);
+    let event = create_key_event(KeyCode::Backspace);
+    match handler.handle_key(event) {
+        KeyAction::InputKeypress(_) => {}
+        other => panic!("Expected InputKeypress in Input context, got {:?}", other),
+    }
+}
+
+// ── US7: Full Vim Mode Navigation ────────────────────────────────────────────
+
+#[test]
+fn test_vim_big_g_emits_jump_bottom() {
+    let mut handler = KeyHandler::new(true);
+    let event = create_key_event(KeyCode::Char('G'));
+    assert_eq!(handler.handle_key(event), KeyAction::JumpBottom);
+}
+
+#[test]
+fn test_vim_big_g_ignored_when_vim_mode_disabled() {
+    let mut handler = KeyHandler::new(false);
+    let event = create_key_event(KeyCode::Char('G'));
+    // In normal mode G has no binding
+    assert_eq!(handler.handle_key(event), KeyAction::None);
+}
+
+#[test]
+fn test_vim_dd_within_timeout_emits_delete() {
+    let mut handler = KeyHandler::new(true);
+    // First d: sets pending, returns None
+    let first = handler.handle_key(create_key_event(KeyCode::Char('d')));
+    assert_eq!(first, KeyAction::None, "first d should return None");
+    // Second d immediately: returns DeleteItem
+    let second = handler.handle_key(create_key_event(KeyCode::Char('d')));
+    assert_eq!(
+        second,
+        KeyAction::DeleteItem,
+        "second d should return DeleteItem"
+    );
+}
+
+#[test]
+fn test_vim_d_single_does_not_navigate_in_vim_mode() {
+    let mut handler = KeyHandler::new(true);
+    let event = create_key_event(KeyCode::Char('d'));
+    // In vim mode, single d waits for command — must NOT navigate to Dashboard
+    let action = handler.handle_key(event);
+    assert_ne!(
+        action,
+        KeyAction::NavigateTab(TabTarget::Dashboard),
+        "single d in vim mode must not navigate to Dashboard"
+    );
+}
+
+#[test]
+fn test_vim_gg_within_timeout_emits_jump_top() {
+    let mut handler = KeyHandler::new(true);
+    // First g: sets pending, returns None
+    let first = handler.handle_key(create_key_event(KeyCode::Char('g')));
+    assert_eq!(first, KeyAction::None, "first g should return None");
+    // Second g immediately: returns JumpTop
+    let second = handler.handle_key(create_key_event(KeyCode::Char('g')));
+    assert_eq!(second, KeyAction::JumpTop, "second g should return JumpTop");
+}
+
+#[test]
+fn test_vim_g_ignored_when_vim_mode_disabled() {
+    let mut handler = KeyHandler::new(false);
+    let event = create_key_event(KeyCode::Char('g'));
+    assert_eq!(handler.handle_key(event), KeyAction::None);
 }

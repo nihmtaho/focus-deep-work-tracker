@@ -19,13 +19,6 @@ pub fn load_theme(theme_name: Option<&str>) -> Theme {
     }
 }
 
-/// Get the current theme colors (cached)
-pub fn get_current_colors() -> ThemeColors {
-    // TODO: Integrate with config system to read saved theme
-    // For now, use auto-detection
-    Theme::auto_detect().colors()
-}
-
 /// Get theme colors respecting a user-configured theme name.
 /// Falls back to auto-detection if theme_name is None or unknown.
 pub fn get_colors_for_theme(theme_name: Option<&str>) -> ThemeColors {
@@ -76,11 +69,5 @@ mod tests {
             theme,
             Theme::OneDark | Theme::Material | Theme::Light | Theme::Dark
         ));
-    }
-
-    #[test]
-    fn test_get_current_colors_returns_valid_colors() {
-        let colors = get_current_colors();
-        assert_eq!(colors.validate(), Ok(()));
     }
 }

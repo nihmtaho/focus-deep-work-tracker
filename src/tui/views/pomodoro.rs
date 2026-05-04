@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use crate::models::pomodoro::PomodoroPhase;
 use crate::pomodoro::timer::PomodoroTimer;
+use crate::tui::app::App;
 use crate::tui::timer_display::TimerDisplay;
 
 /// Render the Pomodoro timer view with a vertically-centered MM:SS clock and
@@ -29,14 +30,32 @@ use crate::tui::timer_display::TimerDisplay;
 ///  Line 1: current task name  #tag
 ///  Line 2: next phase preview   [P] pause [S] skip [Q] stop
 /// ```
-pub fn render(frame: &mut Frame, timer: &PomodoroTimer, no_color: bool, area: Rect) {
+pub fn render(frame: &mut Frame, timer: &PomodoroTimer, app: &App, area: Rect) {
+    let no_color = app.no_color;
     let w = area.width;
     let h = area.height;
 
-    // Use MM:SS rendering for Pomodoro — lower width thresholds mean bigger digits
-    let display = TimerDisplay::new(Duration::from_secs(timer.remaining_secs));
-    let (clock_rows, is_big) = display.render_for_width_pomodoro(w);
-    let clock_height: u16 = if is_big { 5 } else { 1 };
+    // Animated MM:SS clock — pick rendering tier based on available width.
+    // Width thresholds are lower than HH:MM:SS because MM:SS is a shorter string.
+    let curr_str = app.pomo_clock_curr_str.as_str();
+    let prev_str = app.pomo_clock_prev_str.as_str();
+    let anim_frames = &app.pomo_clock_anim_frame;
+
+    let clock_rows = match TimerDisplay::best_digit_width_pomo(w) {
+        None => {
+            let plain =
+                TimerDisplay::new(Duration::from_secs(timer.remaining_secs)).render_pomodoro();
+            vec![plain]
+        }
+        Some(dw) if dw >= 5 => {
+            TimerDisplay::render_animated_big_sized(curr_str, prev_str, anim_frames, dw)
+        }
+        Some(_) => {
+            // dw == 3 → thin, no animation
+            TimerDisplay::render_big_thin_str(curr_str)
+        }
+    };
+    let clock_height: u16 = clock_rows.len() as u16;
 
     // Show the bottom info panel only when there is enough vertical space
     // Minimum: phase(2) + clock(clock_height) + progress(1) + info(3) + 2 min spacers
@@ -84,7 +103,16 @@ pub fn render(frame: &mut Frame, timer: &PomodoroTimer, no_color: bool, area: Re
     frame.render_widget(phase_widget, chunks[0]);
 
     // ── Clock (MM:SS big or plain) ────────────────────────────────────────────
-    let digit_color = if no_color { Color::Reset } else { Color::Cyan };
+    let digit_color = if no_color {
+        Color::Reset
+    } else {
+        Color::Yellow
+    };
+    let clock_bg = if no_color {
+        Color::Reset
+    } else {
+        Color::Rgb(64, 64, 64)
+    };
     let countdown_lines: Vec<Line> = clock_rows
         .into_iter()
         .map(|row| {
@@ -92,11 +120,14 @@ pub fn render(frame: &mut Frame, timer: &PomodoroTimer, no_color: bool, area: Re
                 row,
                 Style::default()
                     .fg(digit_color)
+                    .bg(clock_bg)
                     .add_modifier(Modifier::BOLD),
             ))
         })
         .collect();
-    let countdown = Paragraph::new(countdown_lines).alignment(Alignment::Center);
+    let countdown = Paragraph::new(countdown_lines)
+        .style(Style::default().bg(clock_bg))
+        .alignment(Alignment::Center);
     frame.render_widget(countdown, chunks[2]);
 
     // ── Progress bar with % label ─────────────────────────────────────────────

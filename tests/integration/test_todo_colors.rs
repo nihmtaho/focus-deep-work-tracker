@@ -225,14 +225,3 @@ fn test_session_tags_graceful_when_no_tag() {
     let displayed = tag.as_deref().unwrap_or("—");
     assert_eq!(displayed, "—", "Missing tag must render as '—' placeholder");
 }
-
-#[test]
-fn test_session_tag_color_consistent_across_themes() {
-    use focus::tui::themes::get_current_colors;
-
-    // get_current_colors() is the single source used in all views (log, dashboard, todos)
-    // Verify it always returns a valid tag_color
-    let colors = get_current_colors();
-    // tag_color is valid if validate() passes (all color fields set)
-    assert_eq!(colors.validate(), Ok(()));
-}

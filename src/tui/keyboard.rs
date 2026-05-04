@@ -27,6 +27,12 @@ pub enum KeyAction {
     FocusRight,
     FocusUp,
     FocusDown,
+    /// Delete the currently selected item
+    DeleteItem,
+    /// Jump to the first item in the current list (vim gg)
+    JumpTop,
+    /// Jump to the last item in the current list (vim G)
+    JumpBottom,
     /// Cancel input (Esc key)
     CancelInput,
     /// Process input keypress (typing)
@@ -48,7 +54,13 @@ pub enum TabTarget {
 pub struct KeyHandler {
     vim_mode: bool,
     context: KeyContext,
+    /// Timestamp of a pending first `d` press in vim mode (for `dd` command).
+    pending_d: Option<std::time::Instant>,
+    /// Timestamp of a pending first `g` press in vim mode (for `gg` command).
+    pending_g: Option<std::time::Instant>,
 }
+
+const VIM_COMMAND_TIMEOUT_MS: u128 = 1000;
 
 impl KeyHandler {
     /// Create a new KeyHandler with the specified vim_mode setting
@@ -56,6 +68,8 @@ impl KeyHandler {
         Self {
             vim_mode,
             context: KeyContext::Viewing,
+            pending_d: None,
+            pending_g: None,
         }
     }
 
@@ -69,8 +83,16 @@ impl KeyHandler {
         self.context
     }
 
-    /// Handle a keyboard event and return the resulting action
-    pub fn handle_key(&self, key: crossterm::event::KeyEvent) -> KeyAction {
+    /// Sync vim_mode from app config (call before handle_key if config may have changed).
+    pub fn set_vim_mode(&mut self, vim_mode: bool) {
+        self.vim_mode = vim_mode;
+    }
+
+    /// Handle a keyboard event and return the resulting action.
+    ///
+    /// Takes `&mut self` because vim multi-key commands (`dd`, `gg`) maintain
+    /// pending-command state that must be mutated between key presses.
+    pub fn handle_key(&mut self, key: crossterm::event::KeyEvent) -> KeyAction {
         use crossterm::event::KeyCode;
 
         // Always handle Esc in input mode first
@@ -78,16 +100,41 @@ impl KeyHandler {
             if key.code == KeyCode::Esc {
                 return KeyAction::CancelInput;
             }
-            // In input mode, allow all other keys for text entry
+            // In input mode, allow all other keys for text entry (including Backspace)
             return KeyAction::InputKeypress(key);
         }
 
         // In viewing mode, handle navigation shortcuts
         match key.code {
+            // Deletion keys — platform independent (Delete = forward-delete / Fn+Backspace
+            // on macOS; Backspace = standard backspace on all platforms)
+            KeyCode::Delete | KeyCode::Backspace if self.context == KeyContext::Viewing => {
+                self.pending_d = None;
+                self.pending_g = None;
+                KeyAction::DeleteItem
+            }
+
             // Tab navigation (letter shortcuts)
+            // In vim mode, `d` is intercepted for `dd` command composition.
+            KeyCode::Char('d') if self.vim_mode && self.context == KeyContext::Viewing => {
+                match self.pending_d {
+                    Some(ts) if ts.elapsed().as_millis() < VIM_COMMAND_TIMEOUT_MS => {
+                        // Second `d` within timeout → delete
+                        self.pending_d = None;
+                        KeyAction::DeleteItem
+                    }
+                    _ => {
+                        // First `d` (or timed-out previous `d`) → start pending window
+                        self.pending_d = Some(std::time::Instant::now());
+                        KeyAction::None
+                    }
+                }
+            }
+            // In normal mode, `d` always navigates to Dashboard
             KeyCode::Char('d') if self.context == KeyContext::Viewing => {
                 KeyAction::NavigateTab(TabTarget::Dashboard)
             }
+
             KeyCode::Char('s') if self.context == KeyContext::Viewing => {
                 KeyAction::NavigateTab(TabTarget::Sessions)
             }
@@ -112,6 +159,26 @@ impl KeyHandler {
             }
             KeyCode::Char('l') if self.vim_mode && self.context == KeyContext::Viewing => {
                 KeyAction::FocusRight
+            }
+
+            // Vim `G` — jump to bottom
+            KeyCode::Char('G') if self.vim_mode && self.context == KeyContext::Viewing => {
+                self.pending_g = None;
+                KeyAction::JumpBottom
+            }
+
+            // Vim `gg` — jump to top (two-key sequence)
+            KeyCode::Char('g') if self.vim_mode && self.context == KeyContext::Viewing => {
+                match self.pending_g {
+                    Some(ts) if ts.elapsed().as_millis() < VIM_COMMAND_TIMEOUT_MS => {
+                        self.pending_g = None;
+                        KeyAction::JumpTop
+                    }
+                    _ => {
+                        self.pending_g = Some(std::time::Instant::now());
+                        KeyAction::None
+                    }
+                }
             }
 
             // Arrow key navigation (when vim mode disabled)
@@ -144,7 +211,7 @@ mod tests {
 
     #[test]
     fn test_letter_shortcut_d_navigates_to_dashboard() {
-        let handler = KeyHandler::new(false);
+        let mut handler = KeyHandler::new(false);
         let event = create_key_event(KeyCode::Char('d'));
         assert_eq!(
             handler.handle_key(event),
@@ -154,7 +221,7 @@ mod tests {
 
     #[test]
     fn test_letter_shortcut_s_navigates_to_sessions() {
-        let handler = KeyHandler::new(false);
+        let mut handler = KeyHandler::new(false);
         let event = create_key_event(KeyCode::Char('s'));
         assert_eq!(
             handler.handle_key(event),
@@ -164,7 +231,7 @@ mod tests {
 
     #[test]
     fn test_letter_shortcut_t_navigates_to_todos() {
-        let handler = KeyHandler::new(false);
+        let mut handler = KeyHandler::new(false);
         let event = create_key_event(KeyCode::Char('t'));
         assert_eq!(
             handler.handle_key(event),
@@ -193,7 +260,7 @@ mod tests {
 
     #[test]
     fn test_vim_mode_hjkl_navigation() {
-        let handler = KeyHandler::new(true);
+        let mut handler = KeyHandler::new(true);
 
         assert_eq!(
             handler.handle_key(create_key_event(KeyCode::Char('h'))),
@@ -215,7 +282,7 @@ mod tests {
 
     #[test]
     fn test_arrow_keys_when_vim_mode_disabled() {
-        let handler = KeyHandler::new(false);
+        let mut handler = KeyHandler::new(false);
 
         assert_eq!(
             handler.handle_key(create_key_event(KeyCode::Left)),
@@ -272,7 +339,7 @@ mod tests {
 
     #[test]
     fn test_number_shortcuts_map_to_focus_panel() {
-        let handler = KeyHandler::new(false);
+        let mut handler = KeyHandler::new(false);
         assert_eq!(
             handler.handle_key(create_key_event(KeyCode::Char('1'))),
             KeyAction::FocusPanel(0)
@@ -289,7 +356,7 @@ mod tests {
 
     #[test]
     fn test_out_of_range_number_ignored() {
-        let handler = KeyHandler::new(false);
+        let mut handler = KeyHandler::new(false);
         assert_eq!(
             handler.handle_key(create_key_event(KeyCode::Char('4'))),
             KeyAction::None

@@ -3,6 +3,7 @@ pub mod events;
 pub mod handlers_todo;
 pub mod keyboard;
 pub mod report;
+pub mod text_input;
 pub mod themes;
 pub mod timer_display;
 pub mod ui;
@@ -126,12 +127,32 @@ fn run_app(
             continue;
         }
 
+        // Advance clock animation state before each draw so digit fades are
+        // smooth.  We compute the current time string here so the renderer can
+        // use app.clock_curr_str / clock_prev_str / clock_anim_frame directly.
+        let clock_str = if let Some(ref session) = app.active_session {
+            let elapsed = session.elapsed();
+            let duration = Duration::from_secs(elapsed.num_seconds() as u64);
+            crate::tui::timer_display::TimerDisplay::new(duration).render()
+        } else {
+            "--:--:--".to_string()
+        };
+        app.advance_clock_anim(&clock_str);
+
+        // Advance Pomodoro clock animation (MM:SS countdown)
+        if let Some(ref timer) = app.pomodoro_timer {
+            let pomo_str = crate::tui::timer_display::TimerDisplay::new(Duration::from_secs(
+                timer.remaining_secs,
+            ))
+            .render_pomodoro();
+            app.advance_pomo_clock_anim(&pomo_str);
+        }
+
         // Draw current state
         terminal.draw(|frame| render(frame, &app))?;
 
-        // Poll for events with 250ms timeout — short enough to feel responsive,
-        // long enough to avoid burning CPU.
-        if event::poll(Duration::from_millis(250))? {
+        // Poll for events with 50ms timeout to drive ~20 fps animation ticks.
+        if event::poll(Duration::from_millis(50))? {
             match event::read()? {
                 Event::Key(key) => {
                     let should_quit = handle_key_event(&mut app, conn, key)?;
@@ -156,8 +177,20 @@ fn run_app(
                 for event in events {
                     use crate::pomodoro::timer::TimerEvent;
                     match event {
-                        TimerEvent::PhaseComplete { to, .. } => {
+                        TimerEvent::PhaseComplete { from, to, .. } => {
                             use crate::models::pomodoro::PomodoroPhase;
+                            // Long break just finished → full cycle complete, stop the session.
+                            if from == PomodoroPhase::LongBreak {
+                                app.pomodoro_timer = None;
+                                let _ = app.load_dashboard(conn);
+                                app.invalidate_report_metrics_cache();
+                                let body = "All sessions complete. Great work!";
+                                app.message = Some(crate::tui::app::MessageOverlay::success(
+                                    body.to_string(),
+                                ));
+                                crate::pomodoro::notify::send_notification("Done!", body);
+                                break; // stop processing further events for this tick
+                            }
                             let (title, body) = match to {
                                 PomodoroPhase::Work => ("Focus!", "Break over — time to work."),
                                 PomodoroPhase::Break => ("Break time!", "Work phase complete."),

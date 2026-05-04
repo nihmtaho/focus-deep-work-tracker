@@ -1,97 +1,59 @@
-# focus Development Guidelines
+# CLAUDE.md
 
-Auto-generated from all feature plans. Last updated: 2026-04-08
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Active Technologies
-- Rust stable (1.77+) + clap 4 (existing), rusqlite 0.31 bundled (existing), chrono 0.4 (existing), colored 2 (existing), anyhow 1 (existing), thiserror 1 (existing), dirs 5 (existing), **ratatui 0.29** (new), **crossterm 0.28** (new) (003-focus-tui-dashboard)
-- SQLite WAL mode via existing `db::open_db()`; no schema changes (003-focus-tui-dashboard)
-- Rust stable 1.77+ + ratatui 0.29, crossterm 0.28, rusqlite 0.31 (bundled), clap 4, serde_json 1, dirs 5, chrono 0.4, colored 2, anyhow 1, thiserror 1; **new**: ctrlc 3 (004-tui-session-controls)
-- SQLite WAL mode via existing `db::open_db()` — no schema changes (004-tui-session-controls)
-- Rust stable 1.77+ + clap 4, rusqlite 0.31 (bundled), ratatui 0.29, crossterm 0.28, chrono 0.4, colored 2, anyhow 1, thiserror 1, dirs 5, ctrlc 3. New: `toml = "0.8"`. (005-pomodoro-timer-mode)
-- SQLite WAL mode via existing `db::open_db()`. Two additive changes: `ALTER TABLE sessions ADD COLUMN mode TEXT NOT NULL DEFAULT 'freeform'`; `CREATE TABLE IF NOT EXISTS pomodoro_stats (...)`. (005-pomodoro-timer-mode)
-- Rust 1.77+ (stable) + Existing: clap 4, rusqlite 0.31 (bundled), chrono 0.4, colored 2, anyhow 1, thiserror 1, dirs 5, ratatui 0.29, crossterm 0.28, ctrlc 3, toml 0.8. New: `npm` CLI tooling, GitHub Actions (CI/CD) (006-npm-package-publish)
-- SQLite (no schema changes) (006-npm-package-publish)
-- Rust stable 1.77+ (existing project standard) + clap 4 (CLI), rusqlite 0.31 (`bundled` feature), ratatui 0.29, crossterm 0.28, chrono 0.4, colored 2, anyhow 1, thiserror 1, dirs 5, ctrlc 3, toml 0.8, serde_json 1 (007-ui-refresh)
-- SQLite with WAL mode (existing db::open_db() wrapper); new `todos` table and `mode` column on sessions (007-ui-refresh)
+## Stack
 
-- Rust stable (1.77+) + clap 4 (derive API), rusqlite 0.31 (`bundled` feature), chrono 0.4, colored 2.x, dirs 5.x, thiserror 1.x, anyhow 1.x (001-focus-cli-tracker)
-
-## Project Structure
-
-```text
-src/
-tests/
-```
+- **Rust stable 1.77+** — clap 4 (derive API), rusqlite 0.31 (bundled), ratatui 0.29, crossterm 0.28, chrono 0.4, colored 2, anyhow 1, thiserror 1, dirs 5, ctrlc 3, toml 0.8, serde_json 1
+- **SQLite WAL** at `~/.local/share/focus/focus.db` via `db::open_db()`
+- **Config JSON** at `~/.config/focus/config.json` via `src/config.rs`
 
 ## Commands
 
-cargo test [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLOGIES] cargo clippy
-
-## Code Style
-
-Rust stable (1.77+): Follow standard conventions
-
-## Recent Changes
-- 007-ui-refresh: Added Rust stable 1.77+ (existing project standard) + clap 4 (CLI), rusqlite 0.31 (`bundled` feature), ratatui 0.29, crossterm 0.28, chrono 0.4, colored 2, anyhow 1, thiserror 1, dirs 5, ctrlc 3, toml 0.8, serde_json 1
-- 006-npm-package-publish: Added Rust 1.77+ (stable) + Existing: clap 4, rusqlite 0.31 (bundled), chrono 0.4, colored 2, anyhow 1, thiserror 1, dirs 5, ratatui 0.29, crossterm 0.28, ctrlc 3, toml 0.8. New: `npm` CLI tooling, GitHub Actions (CI/CD)
-- 005-pomodoro-timer-mode: Added Rust stable 1.77+ + clap 4, rusqlite 0.31 (bundled), ratatui 0.29, crossterm 0.28, chrono 0.4, colored 2, anyhow 1, thiserror 1, dirs 5, ctrlc 3. New: `toml = "0.8"`.
-
-
-<!-- MANUAL ADDITIONS START -->
-
-## 008: Dashboard UI/UX Enhancements (2026-04)
-
-### Architecture Patterns
-
-**Theme system** (`src/theme/`):
-- Each theme is a `FocusTheme` struct in its own file (`dark.rs`, `light.rs`, `material.rs`, `onedark.rs`)
-- Themes expose typed color fields (`primary`, `secondary`, `success`, `warning`, `error`, `timer_digit`, `timer_separator`)
-- `src/theme/mod.rs` resolves theme name → struct; falls back to `dark` on unknown name
-- `app.theme_name: String` stores the chosen theme; `tui::themes::load_theme(&name)` returns the struct
-- `NO_COLOR` is checked once at startup and stored in `App.no_color`; all render paths guard on it
-
-**Flip-clock timer display** (`src/tui/timer_display.rs`):
-- Renders digits as 3×5 block characters using Unicode box-drawing / block elements
-- `TimerDisplay::render_into(frame, area, secs, theme, no_color)` is the single entry point
-- Two usage sites: `views/dashboard.rs` (running session) and `views/pomodoro.rs` (pomodoro timer)
-- When `no_color = true`, all Color fields are ignored and default `Style::default()` is used
-
-**Keyboard context system** (`src/tui/keyboard.rs`):
-- `KeyboardContext` enum: `Normal`, `TodoInput`, `ConfirmQuit`
-- Stored in `App.keyboard_context`; `handle_key_event` dispatches on context first, then tab
-- Letter shortcuts `d/l/p/r` switch tabs from `Normal` context only
-- ESC in `TodoInput` cancels input without committing; ESC in `Normal` shows quit confirm
-
-**Report panel** (`src/tui/report.rs`):
-- Queries sessions, pomodoro_stats, and todos tables
-- `ReportMetrics` struct holds all aggregated values; built once per tab-switch + periodic refresh
-- Bar chart uses ratatui `BarChart` widget; summary section uses `Table`
-
-**TUI event loop** (`src/tui/mod.rs`):
-- `event::poll(Duration::from_millis(250))` — key events return immediately on press (<1ms latency)
-- 250ms timeout drives timer tick and UI refresh; well under perceptible lag threshold
-- `last_tick` advances by whole elapsed seconds; pomodoro timer uses `tick_secs(elapsed, conn)`
-
-### Key Files Added in 008
-
-| File | Purpose |
-|---|---|
-| `src/theme/mod.rs` | Theme loader + `FocusTheme` struct |
-| `src/theme/{dark,light,material,onedark}.rs` | Theme implementations |
-| `src/tui/timer_display.rs` | Flip-clock digit renderer |
-| `src/tui/report.rs` | Report panel metrics + rendering |
-| `src/tui/keyboard.rs` | Keyboard context switching |
-| `src/tui/themes.rs` | Theme integration helpers |
-| `tests/integration/test_theme_loading.rs` | Theme + NO_COLOR tests |
-| `tests/integration/test_pomodoro_panel.rs` | Pomodoro panel state tests |
-
-### Commands
-
 ```bash
-cargo test                        # 142 tests (115 unit + 27 integration)
-cargo clippy -- -D warnings       # zero warnings policy
-cargo fmt                         # required before every commit
-NO_COLOR=1 focus ui               # verify ANSI-free output (Principle IV)
+cargo test                   # run all tests (~302: lib + integration + unit)
+cargo test <name>            # run a single test by name
+cargo clippy -- -D warnings  # zero warnings policy
+cargo fmt                    # required before every commit
 ```
 
-<!-- MANUAL ADDITIONS END -->
+## Architecture
+
+```
+src/
+  main.rs          — CLI entry point (clap dispatch)
+  lib.rs           — public re-exports
+  config.rs        — FocusConfig load/save (JSON, ~/.config/focus/config.json)
+  db/              — SQLite helpers: open_db(), migrations, queries
+  models/          — domain types (Session, Todo, PomodoroStat, …)
+  commands/        — one file per CLI subcommand (start, stop, log, status, config, …)
+  tui/
+    mod.rs         — event loop: poll(250ms), tick, crossterm setup/teardown
+    app.rs         — App state: active tab, keyboard_context, config, theme, no_color
+    keyboard.rs    — KeyHandler (pending multi-key state: dd/gg), KeyboardContext enum
+    handlers_todo.rs — todo CRUD key handlers
+    ui.rs          — top-level render dispatch
+    views/         — per-tab render (dashboard, log, pomodoro, report)
+    timer_display.rs — flip-clock 3×5 block-char renderer
+    report.rs      — ReportMetrics aggregation + BarChart/Table rendering
+    themes.rs      — load_theme(&name) → FocusTheme
+    text_input.rs  — shared TextInput widget (vim Normal/Insert mode)
+  theme/
+    mod.rs         — Theme enum, from_name/name/resolve helpers, FocusTheme struct
+    dark.rs / light.rs / material.rs / onedark.rs — theme implementations
+  display/         — colored CLI output helpers
+  pomodoro/        — pomodoro timer logic
+  error.rs         — FocusError via thiserror
+tests/
+  integration/     — integration tests (DB, config, keyboard, timer, theme)
+```
+
+## Key Patterns
+
+**Theme system**: `Theme::resolve(Option<&str>)` reads config, falls back to dark. `NO_COLOR` env var is checked once at startup and stored in `App.no_color`; all render paths guard on it.
+
+**Keyboard context**: `App.keyboard_context` is `Normal | TodoInput | ConfirmQuit`. `KeyHandler::handle` dispatches on context first. Multi-key sequences (`dd`, `gg`) use `pending_d`/`pending_g` `Instant` fields with a 1s window.
+
+**TUI event loop**: `event::poll(250ms)` — keys return immediately; timeout drives timer ticks. Pomodoro timer calls `tick_secs(elapsed, conn)`.
+
+**Config CLI**: `focus config get/set theme` and `focus config get/set vim-mode` persist via `save_config()`.

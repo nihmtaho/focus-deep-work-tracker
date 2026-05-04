@@ -121,11 +121,7 @@ impl ReportMetrics {
                 |r| r.get(0),
             )
             .unwrap_or(0);
-        let completion_rate = if total_todos > 0 {
-            completed_todos * 100 / total_todos
-        } else {
-            0
-        };
+        let completion_rate = (completed_todos * 100).checked_div(total_todos).unwrap_or(0);
 
         // Focus streak: consecutive days (ending today) with ≥1 completed session
         let focus_streak_days = compute_focus_streak(conn);
@@ -185,12 +181,12 @@ impl Default for ReportMetrics {
 
 /// Unix timestamp for the start of today (local midnight).
 fn today_start_ts() -> i64 {
-    crate::commands::report::today_start()
+    crate::db::time::today_start()
 }
 
 /// Unix timestamp for the start of the current week (local Monday midnight).
 fn week_start_ts() -> i64 {
-    crate::commands::report::current_week_start()
+    crate::db::time::current_week_start()
 }
 
 /// Count consecutive days ending today that have at least one completed session.
