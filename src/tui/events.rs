@@ -53,24 +53,6 @@ pub fn handle_key_event(app: &mut App, conn: &rusqlite::Connection, key: KeyEven
             app.active_tab = Tab::Settings;
             return Ok(false);
         }
-        // Letter-based tab shortcuts
-        KeyCode::Char('d') | KeyCode::Char('D') => {
-            // In vim mode on Dashboard, 'd' starts 'dd' (delete) — let tab handler process it
-            if !(app.config.vim_mode && app.active_tab == Tab::Dashboard) {
-                app.active_tab = Tab::Dashboard;
-                return Ok(false);
-            }
-            // Fall through to tab handler for vim 'dd'
-        }
-        KeyCode::Char('l') | KeyCode::Char('L') => {
-            app.active_tab = Tab::Log;
-            app.load_log(conn)?;
-            return Ok(false);
-        }
-        KeyCode::Char('s') | KeyCode::Char('S') => {
-            app.active_tab = Tab::Settings;
-            return Ok(false);
-        }
         KeyCode::Tab => {
             app.active_tab = match app.active_tab {
                 Tab::Dashboard => Tab::Log,
@@ -526,8 +508,7 @@ pub fn handle_dashboard_tab(
                                 } else {
                                     Some(idx.min(new_len - 1))
                                 };
-                                app.message =
-                                    Some(MessageOverlay::success("Todo deleted."));
+                                app.message = Some(MessageOverlay::success("Todo deleted."));
                             } else {
                                 app.message = Some(MessageOverlay::error(
                                     "Cannot delete TODO linked to active session",
@@ -666,11 +647,9 @@ pub fn handle_settings_tab(app: &mut App, key: KeyEvent) -> Result<bool> {
                     let path = crate::config::config_file_path();
                     let label = app.config.theme.as_deref().unwrap_or("auto");
                     if let Err(e) = save_config(&path, &app.config) {
-                        app.message =
-                            Some(MessageOverlay::error(format!("Failed to save: {e}")));
+                        app.message = Some(MessageOverlay::error(format!("Failed to save: {e}")));
                     } else {
-                        app.message =
-                            Some(MessageOverlay::success(format!("Theme: {label}")));
+                        app.message = Some(MessageOverlay::success(format!("Theme: {label}")));
                     }
                 }
                 _ => {
@@ -729,11 +708,9 @@ pub fn handle_settings_tab(app: &mut App, key: KeyEvent) -> Result<bool> {
                     let path = crate::config::config_file_path();
                     let label = app.config.theme.as_deref().unwrap_or("auto");
                     if let Err(e) = save_config(&path, &app.config) {
-                        app.message =
-                            Some(MessageOverlay::error(format!("Failed to save: {e}")));
+                        app.message = Some(MessageOverlay::error(format!("Failed to save: {e}")));
                     } else {
-                        app.message =
-                            Some(MessageOverlay::success(format!("Theme: {label}")));
+                        app.message = Some(MessageOverlay::success(format!("Theme: {label}")));
                     }
                 }
                 _ => {
@@ -800,10 +777,7 @@ const THEME_CYCLE: &[Option<&str>] = &[
 ];
 
 fn theme_index(current: Option<&str>) -> usize {
-    THEME_CYCLE
-        .iter()
-        .position(|t| *t == current)
-        .unwrap_or(0)
+    THEME_CYCLE.iter().position(|t| *t == current).unwrap_or(0)
 }
 
 fn next_theme(current: Option<&str>) -> Option<String> {
@@ -813,7 +787,11 @@ fn next_theme(current: Option<&str>) -> Option<String> {
 
 fn prev_theme(current: Option<&str>) -> Option<String> {
     let idx = theme_index(current);
-    let prev = if idx == 0 { THEME_CYCLE.len() - 1 } else { idx - 1 };
+    let prev = if idx == 0 {
+        THEME_CYCLE.len() - 1
+    } else {
+        idx - 1
+    };
     THEME_CYCLE[prev].map(|s| s.to_string())
 }
 
@@ -1244,7 +1222,13 @@ mod tests {
         let mut app = make_app();
         app.load_log(&conn).unwrap();
         handle_log_tab(&mut app, &conn, make_key(KeyCode::Char('r'))).unwrap();
-        assert!(matches!(app.overlay, Overlay::Prompt { action: PromptAction::RenameSession { .. }, .. }));
+        assert!(matches!(
+            app.overlay,
+            Overlay::Prompt {
+                action: PromptAction::RenameSession { .. },
+                ..
+            }
+        ));
         assert_eq!(app.prompt_input.buffer, "original name");
     }
 
@@ -1263,7 +1247,11 @@ mod tests {
         let id = insert_completed_session(&conn, "old");
         let mut app = make_app();
         app.load_log(&conn).unwrap();
-        app.open_prompt("Rename session:", "new name", PromptAction::RenameSession { id });
+        app.open_prompt(
+            "Rename session:",
+            "new name",
+            PromptAction::RenameSession { id },
+        );
         handle_overlay_prompt(&mut app, &conn, make_key(KeyCode::Enter)).unwrap();
         let task: String = conn
             .query_row("SELECT task FROM sessions WHERE id = ?1", [id], |r| {
@@ -1327,6 +1315,18 @@ mod tests {
             Some(0),
             "gg should jump to first todo"
         );
+    }
+
+    #[test]
+    fn d_key_with_vim_mode_does_not_switch_tab() {
+        // 'd' is no longer intercepted globally; it falls through to the dashboard handler
+        let (conn, _f) = test_conn();
+        let mut app = make_app();
+        app.config.vim_mode = true;
+        app.active_tab = Tab::Dashboard;
+        let result = handle_key_event(&mut app, &conn, make_key(KeyCode::Char('d')));
+        assert!(result.is_ok());
+        assert_eq!(app.active_tab, Tab::Dashboard);
     }
 
     #[test]

@@ -1,3 +1,7 @@
+use crate::pomodoro::stats::PomodoroPanelState;
+use crate::tui::app::{App, MessageKind, Overlay, Tab};
+use crate::tui::timer_display::TimerDisplay;
+use crate::tui::views;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -5,14 +9,10 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Frame,
 };
-use crate::pomodoro::stats::PomodoroPanelState;
-use crate::tui::app::{App, MessageKind, Overlay, Tab};
-use crate::tui::timer_display::TimerDisplay;
-use crate::tui::views;
 
 const HELP_TEXT: &str = "\
 Global
-  d/l/s     Dashboard/Log/Settings
+  1/2/3     Dashboard/Log/Settings
   Tab       Next tab
   ?         Show this help
   q         Quit
@@ -93,9 +93,9 @@ pub fn render(frame: &mut Frame, app: &App) {
 
 fn render_tab_bar(frame: &mut Frame, app: &App, tc: &crate::theme::ThemeColors, area: Rect) {
     let tabs = [
-        (Tab::Dashboard, "[d]Dashboard"),
-        (Tab::Log, "[l]Log"),
-        (Tab::Settings, "[s]Settings"),
+        (Tab::Dashboard, "Dashboard"),
+        (Tab::Log, "Log"),
+        (Tab::Settings, "Settings"),
     ];
 
     let spans: Vec<Span> = tabs
@@ -164,7 +164,12 @@ fn centered_rect(percent_x: u16, height: u16, area: Rect) -> Rect {
     }
 }
 
-fn render_prompt_overlay(frame: &mut Frame, app: &App, tc: &crate::theme::ThemeColors, label: &str) {
+fn render_prompt_overlay(
+    frame: &mut Frame,
+    app: &App,
+    tc: &crate::theme::ThemeColors,
+    label: &str,
+) {
     let block_area = centered_rect(60, 7, frame.area());
     frame.render_widget(Clear, block_area);
 
@@ -173,22 +178,39 @@ fn render_prompt_overlay(frame: &mut Frame, app: &App, tc: &crate::theme::ThemeC
 
     let cursor_style = if ti.vim_enabled {
         match ti.vim_mode {
-            crate::tui::text_input::VimInputMode::Insert =>
-                Style::default().fg(tc.background).bg(tc.accent).add_modifier(Modifier::BOLD),
-            crate::tui::text_input::VimInputMode::Normal =>
-                Style::default().fg(tc.background).bg(tc.warning).add_modifier(Modifier::BOLD),
+            crate::tui::text_input::VimInputMode::Insert => Style::default()
+                .fg(tc.background)
+                .bg(tc.accent)
+                .add_modifier(Modifier::BOLD),
+            crate::tui::text_input::VimInputMode::Normal => Style::default()
+                .fg(tc.background)
+                .bg(tc.warning)
+                .add_modifier(Modifier::BOLD),
         }
     } else {
-        Style::default().fg(tc.background).bg(tc.accent).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(tc.background)
+            .bg(tc.accent)
+            .add_modifier(Modifier::BOLD)
     };
 
     let mut lines = vec![
         Line::from(Span::styled(label, Style::default().fg(tc.warning))),
         Line::from(Span::raw("")),
         Line::from(vec![
-            Span::styled(before, Style::default().fg(tc.foreground).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                before,
+                Style::default()
+                    .fg(tc.foreground)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::styled(&cursor_char, cursor_style),
-            Span::styled(after, Style::default().fg(tc.foreground).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                after,
+                Style::default()
+                    .fg(tc.foreground)
+                    .add_modifier(Modifier::BOLD),
+            ),
         ]),
     ];
 
@@ -441,7 +463,12 @@ pub fn render_pomodoro_panel(frame: &mut Frame, area: Rect, tc: &crate::theme::T
 
 /// Render the Report panel showing session analytics and productivity metrics.
 /// Displays: session counts, total duration, completion rate, focus streak, and productivity score.
-pub fn render_report_panel(frame: &mut Frame, area: Rect, app: &App, tc: &crate::theme::ThemeColors) {
+pub fn render_report_panel(
+    frame: &mut Frame,
+    area: Rect,
+    app: &App,
+    tc: &crate::theme::ThemeColors,
+) {
     let metrics = &app.report_metrics;
 
     let content = vec![
@@ -512,7 +539,6 @@ pub fn render_report_panel(frame: &mut Frame, area: Rect, app: &App, tc: &crate:
 /// blocks (█ ▓ ▒ ░).  Colors: Yellow digits on #404040 dark-gray background.
 /// The clock is centered both horizontally and vertically inside the panel.
 pub fn render_timer_zone(frame: &mut Frame, area: Rect, app: &App, tc: &crate::theme::ThemeColors) {
-
     let border_style = Style::default().fg(tc.panel_border);
 
     let block = Block::default()
@@ -594,7 +620,6 @@ pub fn render_timer_zone(frame: &mut Frame, area: Rect, app: &App, tc: &crate::t
 /// Render the TODO list zone displaying all todos with visual distinction
 /// for active vs completed items, using theme colors for each state.
 pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App, tc: &crate::theme::ThemeColors) {
-
     let border_style = Style::default().fg(tc.panel_border);
 
     if app.todos.is_empty() {
@@ -661,7 +686,12 @@ pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App, tc: &crate::th
 }
 
 /// Render the controls/help zone displaying available hotkeys.
-pub fn render_controls_zone(frame: &mut Frame, area: Rect, app: &App, tc: &crate::theme::ThemeColors) {
+pub fn render_controls_zone(
+    frame: &mut Frame,
+    area: Rect,
+    app: &App,
+    tc: &crate::theme::ThemeColors,
+) {
     let help_text = if app.pomodoro_timer.is_some() {
         " [p] pause/resume  [s] skip break  [+] extend  [q] stop Pomodoro "
     } else {
@@ -669,7 +699,11 @@ pub fn render_controls_zone(frame: &mut Frame, area: Rect, app: &App, tc: &crate
     };
 
     let controls_widget = Paragraph::new(help_text)
-        .block(Block::default().borders(Borders::TOP).border_style(Style::default().fg(tc.panel_border)))
+        .block(
+            Block::default()
+                .borders(Borders::TOP)
+                .border_style(Style::default().fg(tc.panel_border)),
+        )
         .style(Style::default().fg(tc.panel_border).bg(tc.background))
         .alignment(Alignment::Center);
 
@@ -681,7 +715,6 @@ pub fn render_controls_zone(frame: &mut Frame, area: Rect, app: &App, tc: &crate
 /// Left side: vim mode badge (highlighted when on, dimmed when off).
 /// Right side: context-aware shortcut hints for the current state.
 fn render_status_bar(frame: &mut Frame, app: &App, tc: &crate::theme::ThemeColors, area: Rect) {
-
     // ── Vim mode badge ────────────────────────────────────────────────────────
     let (vim_label, vim_style) = if app.config.vim_mode {
         (
@@ -694,9 +727,7 @@ fn render_status_bar(frame: &mut Frame, app: &App, tc: &crate::theme::ThemeColor
     } else {
         (
             " VIM ",
-            Style::default()
-                .fg(tc.panel_border)
-                .bg(tc.background),
+            Style::default().fg(tc.panel_border).bg(tc.background),
         )
     };
 
@@ -759,6 +790,7 @@ fn render_status_bar(frame: &mut Frame, app: &App, tc: &crate::theme::ThemeColor
     frame.render_widget(badge_widget, badge_area);
 
     // Hints
-    let hint_widget = Paragraph::new(hint).style(Style::default().fg(tc.panel_border).bg(tc.background));
+    let hint_widget =
+        Paragraph::new(hint).style(Style::default().fg(tc.panel_border).bg(tc.background));
     frame.render_widget(hint_widget, hint_area);
 }

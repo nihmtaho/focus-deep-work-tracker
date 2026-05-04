@@ -42,9 +42,6 @@ pub fn handle_todo_key(app: &mut App, db: &Connection, key: KeyCode) -> anyhow::
                 }
             }
         }
-        KeyCode::Char('s') => {
-            app.overlay = crate::tui::app::Overlay::ModeSelector { cursor: 0 };
-        }
         KeyCode::Right if app.selected_todo_idx.is_some() => {
             app.overlay = crate::tui::app::Overlay::ModeSelector { cursor: 0 };
         }
@@ -66,4 +63,3 @@ pub fn handle_todo_key(app: &mut App, db: &Connection, key: KeyCode) -> anyhow::
 
     Ok(())
 }
-
