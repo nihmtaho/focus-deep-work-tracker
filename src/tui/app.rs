@@ -193,6 +193,18 @@ pub struct App {
     pub report_metrics_cached_at: Option<Instant>,
     /// When true, the dashboard shows an expanded full-screen Pomodoro panel.
     pub full_pomodoro_panel: bool,
+    /// Previous clock string (what we're animating FROM).
+    pub clock_prev_str: String,
+    /// Current clock string (what we're animating TO), kept in sync each frame.
+    pub clock_curr_str: String,
+    /// Per-character animation frame: 0 = static, 1–6 = transition in progress (300 ms total).
+    pub clock_anim_frame: [u8; 8],
+    /// Previous Pomodoro MM:SS string (what we're animating FROM).
+    pub pomo_clock_prev_str: String,
+    /// Current Pomodoro MM:SS string, kept in sync each frame.
+    pub pomo_clock_curr_str: String,
+    /// Per-character animation frame for the Pomodoro MM:SS clock (5 positions).
+    pub pomo_clock_anim_frame: [u8; 5],
 }
 
 pub const LOG_PAGE_SIZE: usize = 10;
@@ -229,6 +241,12 @@ impl App {
             report_metrics: ReportMetrics::default(),
             report_metrics_cached_at: None,
             full_pomodoro_panel: false,
+            clock_prev_str: "--:--:--".to_string(),
+            clock_curr_str: "--:--:--".to_string(),
+            clock_anim_frame: [0u8; 8],
+            pomo_clock_prev_str: "--:--".to_string(),
+            pomo_clock_curr_str: "--:--".to_string(),
+            pomo_clock_anim_frame: [0u8; 5],
         }
     }
 
@@ -367,6 +385,70 @@ impl App {
             label: label.into(),
             action,
         };
+    }
+
+    /// Advance clock digit-fade animation.  Call once per render frame (~50 ms).
+    ///
+    /// If `new_str` differs from the tracked current string a digit changed:
+    /// any position whose character changed gets its animation frame set to 1
+    /// (start of a 6-frame / 300 ms fade).  On subsequent calls with the same
+    /// string, in-progress frames are incremented; at frame 7 they reset to 0
+    /// (animation complete, digit shown at full opacity).
+    ///
+    /// Only digit↔digit transitions (both chars are ASCII digits) trigger the
+    /// animation — switching from `--:--:--` to digits or back does not fade.
+    pub fn advance_clock_anim(&mut self, new_str: &str) {
+        if new_str != self.clock_curr_str {
+            let prev_chars: Vec<char> = self.clock_curr_str.chars().collect();
+            let new_chars: Vec<char> = new_str.chars().collect();
+            self.clock_prev_str = self.clock_curr_str.clone();
+            self.clock_curr_str = new_str.to_string();
+
+            let len = self.clock_anim_frame.len().min(new_chars.len());
+            for (i, &nch) in new_chars.iter().enumerate().take(len) {
+                let pch = prev_chars.get(i).copied().unwrap_or(' ');
+                if pch != nch && pch.is_ascii_digit() && nch.is_ascii_digit() {
+                    self.clock_anim_frame[i] = 1;
+                }
+            }
+        } else {
+            for f in &mut self.clock_anim_frame {
+                if *f > 0 {
+                    *f += 1;
+                    if *f > 6 {
+                        *f = 0;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Same fade-animation logic as [`advance_clock_anim`] but for the Pomodoro
+    /// MM:SS countdown.  Call once per render frame when a Pomodoro is running.
+    pub fn advance_pomo_clock_anim(&mut self, new_str: &str) {
+        if new_str != self.pomo_clock_curr_str {
+            let prev_chars: Vec<char> = self.pomo_clock_curr_str.chars().collect();
+            let new_chars: Vec<char> = new_str.chars().collect();
+            self.pomo_clock_prev_str = self.pomo_clock_curr_str.clone();
+            self.pomo_clock_curr_str = new_str.to_string();
+
+            let len = self.pomo_clock_anim_frame.len().min(new_chars.len());
+            for (i, &nch) in new_chars.iter().enumerate().take(len) {
+                let pch = prev_chars.get(i).copied().unwrap_or(' ');
+                if pch != nch && pch.is_ascii_digit() && nch.is_ascii_digit() {
+                    self.pomo_clock_anim_frame[i] = 1;
+                }
+            }
+        } else {
+            for f in &mut self.pomo_clock_anim_frame {
+                if *f > 0 {
+                    *f += 1;
+                    if *f > 6 {
+                        *f = 0;
+                    }
+                }
+            }
+        }
     }
 
     /// Returns true when a Pomodoro session is currently active (timer is running).

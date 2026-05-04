@@ -248,15 +248,6 @@ pub fn handle_overlay_prompt(
                 }
                 PromptAction::StartPomodoroTag { task } => {
                     let tag_opt = if value.is_empty() { None } else { Some(value) };
-                    let todo_id = app
-                        .selected_todo_idx
-                        .and_then(|idx| app.todos.get(idx).map(|t| t.id));
-                    session_store::insert_session_with_todo(
-                        conn,
-                        &task,
-                        tag_opt.as_deref(),
-                        todo_id,
-                    )?;
                     let config =
                         PomodoroConfig::resolve(None, None, None, None).unwrap_or_default();
                     let timer = PomodoroTimer::new(task, tag_opt, config);
@@ -382,6 +373,8 @@ fn handle_overlay_pomodoro_confirm_stop(
                 }
             }
             app.pomodoro_timer = None;
+            // Stop any active freeform session that may have been left open.
+            let _ = session_store::stop_session(conn);
             app.overlay = Overlay::None;
             app.active_tab = Tab::Dashboard;
             app.message = Some(MessageOverlay::warning("Pomodoro stopped."));
@@ -453,6 +446,8 @@ pub fn handle_dashboard_tab(
                     app.overlay = Overlay::PomodoroConfirmStop;
                 } else {
                     app.pomodoro_timer = None;
+                    // Stop any active freeform session that may have been left open.
+                    let _ = session_store::stop_session(conn);
                     let _ = app.load_dashboard(conn);
                     app.message = Some(MessageOverlay::success("Pomodoro finished."));
                 }

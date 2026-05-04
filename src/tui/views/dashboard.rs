@@ -58,7 +58,7 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
 
     // Render left panel: Pomodoro timer when active, generic timer for freeform, else idle panel
     if let Some(ref timer) = app.pomodoro_timer {
-        crate::tui::views::pomodoro::render(frame, timer, app.no_color, main_chunks[0]);
+        crate::tui::views::pomodoro::render(frame, timer, app, main_chunks[0]);
     } else if app.active_session.is_some() {
         // Show Timer zone during active freeform session
         crate::tui::ui::render_timer_zone(frame, main_chunks[0], app, panel_focused(0));
@@ -111,7 +111,7 @@ pub fn render_full_pomodoro_panel(frame: &mut Frame, app: &App, area: Rect) {
 
     if let Some(ref timer) = app.pomodoro_timer {
         // Delegate the full inner area to the shared pomodoro renderer
-        crate::tui::views::pomodoro::render(frame, timer, app.no_color, inner);
+        crate::tui::views::pomodoro::render(frame, timer, app, inner);
     } else {
         // No active Pomodoro — show idle message
         let idle_lines = vec![

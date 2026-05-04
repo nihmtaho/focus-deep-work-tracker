@@ -5,8 +5,6 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Frame,
 };
-use std::time::Duration;
-
 use crate::pomodoro::stats::PomodoroPanelState;
 use crate::tui::app::{App, MessageKind, Overlay, Tab};
 use crate::tui::timer_display::TimerDisplay;
@@ -520,36 +518,96 @@ pub fn render_report_panel(frame: &mut Frame, area: Rect, app: &App, focused: bo
     frame.render_widget(widget, area);
 }
 
-/// Render the timer zone displaying active session countdown in HH:MM:SS format.
-/// Uses TimerDisplay component for consistent flip-clock formatting.
-/// Takes a significant portion of the layout (40% width) for visual prominence.
+/// Render the timer zone as an animated flip-clock displaying HH:MM:SS.
+///
+/// Digit changes trigger a 6-frame / 300 ms opacity-fade using Unicode shade
+/// blocks (█ ▓ ▒ ░).  Colors: Yellow digits on #404040 dark-gray background.
+/// The clock is centered both horizontally and vertically inside the panel.
 pub fn render_timer_zone(frame: &mut Frame, area: Rect, app: &App, focused: bool) {
     let tc = crate::tui::themes::get_colors_for_theme(app.config.theme.as_deref());
-    let timer_text = if let Some(session) = &app.active_session {
-        let elapsed = session.elapsed();
-        let duration = Duration::from_secs(elapsed.num_seconds() as u64);
-        let timer = TimerDisplay::new(duration);
-        timer.render()
+
+    let border_style = if focused {
+        Style::default()
+            .fg(tc.panel_focus_border)
+            .add_modifier(Modifier::BOLD)
     } else {
-        "--:--:--".to_string()
+        Style::default().fg(tc.panel_border)
     };
 
-    let timer_widget = Paragraph::new(timer_text)
-        .block(
-            Block::default()
-                .title(" [1] Timer ")
-                .borders(Borders::ALL)
-                .border_style(if focused {
-                    Style::default().fg(tc.panel_focus_border).add_modifier(Modifier::BOLD)
-                } else {
-                    Style::default().fg(tc.panel_border)
-                })
-                .style(Style::default().bg(tc.background)),
-        )
-        .style(Style::default().fg(tc.timer_digit).add_modifier(Modifier::BOLD))
+    let block = Block::default()
+        .title(" ⏰ FLIP CLOCK ")
+        .borders(Borders::ALL)
+        .border_style(border_style)
+        .style(Style::default().bg(tc.background));
+
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let digit_color = if app.no_color {
+        Color::Reset
+    } else {
+        Color::Yellow
+    };
+    let clock_bg = if app.no_color {
+        Color::Reset
+    } else {
+        Color::Rgb(64, 64, 64)
+    };
+
+    let curr_str = if app.clock_curr_str.is_empty() {
+        "--:--:--".to_string()
+    } else {
+        app.clock_curr_str.clone()
+    };
+
+    let (clock_rows, clock_height) = match TimerDisplay::best_digit_width_hms(inner.width) {
+        None => (vec![curr_str.clone()], 1u16),
+        Some(dw) if dw >= 5 => {
+            let rows = TimerDisplay::render_animated_big_sized(
+                &curr_str,
+                &app.clock_prev_str,
+                &app.clock_anim_frame,
+                dw,
+            );
+            let h = rows.len() as u16;
+            (rows, h)
+        }
+        Some(_) => {
+            // dw == 3 → thin, no animation
+            let rows = TimerDisplay::render_big_thin_str(&curr_str);
+            let h = rows.len() as u16;
+            (rows, h)
+        }
+    };
+
+    // Vertical centering via layout
+    let v_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Fill(1),
+            Constraint::Length(clock_height),
+            Constraint::Fill(1),
+        ])
+        .split(inner);
+
+    let lines: Vec<Line> = clock_rows
+        .into_iter()
+        .map(|row| {
+            Line::from(Span::styled(
+                row,
+                Style::default()
+                    .fg(digit_color)
+                    .bg(clock_bg)
+                    .add_modifier(Modifier::BOLD),
+            ))
+        })
+        .collect();
+
+    let clock_widget = Paragraph::new(lines)
+        .style(Style::default().bg(clock_bg))
         .alignment(Alignment::Center);
 
-    frame.render_widget(timer_widget, area);
+    frame.render_widget(clock_widget, v_chunks[1]);
 }
 
 /// Render the TODO list zone displaying all todos with visual distinction
