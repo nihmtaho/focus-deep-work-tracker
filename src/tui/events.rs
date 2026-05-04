@@ -331,7 +331,9 @@ fn handle_overlay_mode_selector(
                     app.open_prompt("Session name:", &default_task, PromptAction::StartSession);
                 }
             } else {
-                // Pomodoro: gather task name
+                // Pomodoro: gather task name.
+                // TODO: guard against an active freeform session here (mirrors line 323).
+                // Currently a freeform session is silently stopped when the Pomodoro ends.
                 // If TODO selected, use its title as default
                 let default_task = app
                     .selected_todo_idx
