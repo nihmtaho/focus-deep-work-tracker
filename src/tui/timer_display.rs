@@ -443,7 +443,7 @@ impl TimerDisplay {
         let bar_h = (height / 10).max(1);
         // Internal horizontal gap — forced odd so left/right strokes are equal width
         let gap_raw = (width / 9).max(1);
-        let inner_gap = if gap_raw % 2 == 0 {
+        let inner_gap = if gap_raw.is_multiple_of(2) {
             gap_raw + 1
         } else {
             gap_raw

@@ -42,7 +42,7 @@ pub fn render(frame: &mut Frame, app: &App, tc: &crate::theme::ThemeColors, area
     } else {
         "Vim Mode: [ OFF ]"
     };
-    let vim_style = row_style(vim_selected, app.config.vim_mode, app.no_color, &tc);
+    let vim_style = row_style(vim_selected, app.config.vim_mode, app.no_color, tc);
 
     let theme_selected = app.settings_selected == 1;
     let theme_name = match app.config.theme.as_deref() {
@@ -58,7 +58,7 @@ pub fn render(frame: &mut Frame, app: &App, tc: &crate::theme::ThemeColors, area
         theme_selected,
         app.config.theme.is_some(),
         app.no_color,
-        &tc,
+        tc,
     );
 
     let general_content = Paragraph::new(vec![

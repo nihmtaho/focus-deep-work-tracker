@@ -647,7 +647,7 @@ pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App, tc: &crate::th
             let text = format!("  {} {}", status_icon, todo.title);
 
             // Apply state-based color from theme
-            let todo_color = todo.get_color(&tc);
+            let todo_color = todo.get_color(tc);
             let base_style = if app.no_color {
                 Style::default()
             } else {
