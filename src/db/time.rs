@@ -59,6 +59,7 @@ mod tests {
         let ts = rolling_7d_start();
         let now = chrono::Utc::now().timestamp();
         let diff = now - ts;
-        assert!(diff >= 604795 && diff <= 604805, "diff={diff}");
+        // Lower bound is exactly 7 days; upper allows up to 10s for test startup overhead.
+        assert!(diff >= 604800 && diff <= 604810, "diff={diff}");
     }
 }
