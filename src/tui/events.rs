@@ -1152,8 +1152,7 @@ mod tests {
         assert!(!app.config.vim_mode);
     }
 
-    // T040: Delete flow tests — 'd' no longer deletes sessions in Log tab
-    // (the global handler intercepts 'd' for Dashboard navigation; sessions are read-only)
+    // T040: Delete flow tests — 'd' does not delete sessions in Log tab (sessions are read-only)
     #[test]
     fn log_d_does_not_open_confirm_overlay() {
         let (conn, _f) = test_conn();
@@ -1161,7 +1160,7 @@ mod tests {
         let mut app = make_app();
         app.load_log(&conn).unwrap();
         handle_log_tab(&mut app, &conn, make_key(KeyCode::Char('d'))).unwrap();
-        // No ConfirmDelete overlay — 'd' is reserved for Dashboard navigation globally
+        // No ConfirmDelete overlay — 'd' has no delete action in the Log tab (sessions are read-only)
         assert!(matches!(app.overlay, Overlay::None));
     }
 
@@ -1318,15 +1317,24 @@ mod tests {
     }
 
     #[test]
-    fn d_key_with_vim_mode_does_not_switch_tab() {
-        // 'd' is no longer intercepted globally; it falls through to the dashboard handler
+    fn d_key_reaches_dashboard_handler_dd_deletes_todo() {
+        // 'd' is no longer intercepted globally; it falls through to the dashboard handler.
+        // Verify by confirming the 'dd' sequence still deletes a todo.
         let (conn, _f) = test_conn();
+        crate::models::todo::insert(&conn, "to be deleted").unwrap();
         let mut app = make_app();
         app.config.vim_mode = true;
         app.active_tab = Tab::Dashboard;
-        let result = handle_key_event(&mut app, &conn, make_key(KeyCode::Char('d')));
-        assert!(result.is_ok());
+        app.load_todos(&conn).unwrap();
+        app.selected_todo_idx = Some(0);
+        // First 'd' — starts pending sequence
+        handle_key_event(&mut app, &conn, make_key(KeyCode::Char('d'))).unwrap();
+        // Still on Dashboard, todo still exists
         assert_eq!(app.active_tab, Tab::Dashboard);
+        assert_eq!(app.todos.len(), 1);
+        // Second 'd' within timeout — fires delete
+        handle_key_event(&mut app, &conn, make_key(KeyCode::Char('d'))).unwrap();
+        assert_eq!(app.todos.len(), 0, "dd should delete the selected todo");
     }
 
     #[test]
