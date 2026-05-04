@@ -1,5 +1,6 @@
 pub mod pomodoro_store;
 pub mod session_store;
+pub mod time;
 
 use anyhow::Result;
 use rusqlite::Connection;

@@ -185,12 +185,12 @@ impl Default for ReportMetrics {
 
 /// Unix timestamp for the start of today (local midnight).
 fn today_start_ts() -> i64 {
-    crate::commands::report::today_start()
+    crate::db::time::today_start()
 }
 
 /// Unix timestamp for the start of the current week (local Monday midnight).
 fn week_start_ts() -> i64 {
-    crate::commands::report::current_week_start()
+    crate::db::time::current_week_start()
 }
 
 /// Count consecutive days ending today that have at least one completed session.

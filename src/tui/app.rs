@@ -234,7 +234,7 @@ impl App {
 
     /// Load/refresh dashboard data from the database.
     pub fn load_dashboard(&mut self, conn: &rusqlite::Connection) -> anyhow::Result<()> {
-        use crate::commands::report::today_start;
+        use crate::db::time::today_start;
         use crate::db::session_store;
 
         self.active_session = session_store::get_active_session(conn)?;
@@ -280,7 +280,7 @@ impl App {
 
     /// Tick update for Dashboard tab (refreshes active session timer).
     pub fn tick_dashboard(&mut self, conn: &rusqlite::Connection) -> anyhow::Result<()> {
-        use crate::commands::report::today_start;
+        use crate::db::time::today_start;
         use crate::db::session_store;
         self.active_session = session_store::get_active_session(conn)?;
         self.today_sessions = session_store::list_completed_since(conn, today_start())?;
