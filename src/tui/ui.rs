@@ -385,8 +385,8 @@ fn render_message_overlay(
 
 /// Render the Pomodoro panel when idle, showing historical stats and start button.
 /// Displays total cycles, cumulative duration, focus streak, and last completion time.
-pub fn render_pomodoro_panel(frame: &mut Frame, area: Rect, _app: &App, focused: bool) {
-    let tc = crate::tui::themes::get_colors_for_theme(_app.config.theme.as_deref());
+pub fn render_pomodoro_panel(frame: &mut Frame, area: Rect, app: &App) {
+    let tc = crate::tui::themes::get_colors_for_theme(app.config.theme.as_deref());
     // For now, create an idle panel state as placeholder
     let panel_state = PomodoroPanelState::idle();
 
@@ -426,16 +426,12 @@ pub fn render_pomodoro_panel(frame: &mut Frame, area: Rect, _app: &App, focused:
         ]
     };
 
-    let border_style = if focused {
-        Style::default().fg(tc.panel_focus_border).add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(tc.panel_border)
-    };
+    let border_style = Style::default().fg(tc.panel_border);
 
     let widget = Paragraph::new(content)
         .block(
             Block::default()
-                .title(" [1] Pomodoro ")
+                .title(" Pomodoro ")
                 .borders(Borders::ALL)
                 .border_style(border_style)
                 .style(Style::default().bg(tc.background)),
@@ -448,7 +444,7 @@ pub fn render_pomodoro_panel(frame: &mut Frame, area: Rect, _app: &App, focused:
 
 /// Render the Report panel showing session analytics and productivity metrics.
 /// Displays: session counts, total duration, completion rate, focus streak, and productivity score.
-pub fn render_report_panel(frame: &mut Frame, area: Rect, app: &App, focused: bool) {
+pub fn render_report_panel(frame: &mut Frame, area: Rect, app: &App) {
     let tc = crate::tui::themes::get_colors_for_theme(app.config.theme.as_deref());
     let metrics = &app.report_metrics;
 
@@ -499,16 +495,12 @@ pub fn render_report_panel(frame: &mut Frame, area: Rect, app: &App, focused: bo
         )),
     ];
 
-    let border_style = if focused {
-        Style::default().fg(tc.panel_focus_border).add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(tc.panel_border)
-    };
+    let border_style = Style::default().fg(tc.panel_border);
 
     let widget = Paragraph::new(content)
         .block(
             Block::default()
-                .title(" [3] Report ")
+                .title(" Report ")
                 .borders(Borders::ALL)
                 .border_style(border_style)
                 .style(Style::default().bg(tc.background)),
@@ -523,16 +515,10 @@ pub fn render_report_panel(frame: &mut Frame, area: Rect, app: &App, focused: bo
 /// Digit changes trigger a 6-frame / 300 ms opacity-fade using Unicode shade
 /// blocks (█ ▓ ▒ ░).  Colors: Yellow digits on #404040 dark-gray background.
 /// The clock is centered both horizontally and vertically inside the panel.
-pub fn render_timer_zone(frame: &mut Frame, area: Rect, app: &App, focused: bool) {
+pub fn render_timer_zone(frame: &mut Frame, area: Rect, app: &App) {
     let tc = crate::tui::themes::get_colors_for_theme(app.config.theme.as_deref());
 
-    let border_style = if focused {
-        Style::default()
-            .fg(tc.panel_focus_border)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(tc.panel_border)
-    };
+    let border_style = Style::default().fg(tc.panel_border);
 
     let block = Block::default()
         .title(" ⏰ FLIP CLOCK ")
@@ -612,20 +598,16 @@ pub fn render_timer_zone(frame: &mut Frame, area: Rect, app: &App, focused: bool
 
 /// Render the TODO list zone displaying all todos with visual distinction
 /// for active vs completed items, using theme colors for each state.
-pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App, focused: bool) {
+pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App) {
     let tc = crate::tui::themes::get_colors_for_theme(app.config.theme.as_deref());
 
-    let border_style = if focused {
-        Style::default().fg(tc.panel_focus_border).add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(tc.panel_border)
-    };
+    let border_style = Style::default().fg(tc.panel_border);
 
     if app.todos.is_empty() {
         let empty_text = Paragraph::new("No TODOs. Press [a] to add one.")
             .block(
                 Block::default()
-                    .title(" [2] TODOs ")
+                    .title(" TODOs ")
                     .borders(Borders::ALL)
                     .border_style(border_style)
                     .style(Style::default().bg(tc.background)),
@@ -674,7 +656,7 @@ pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App, focused: bool)
     let todo_widget = Paragraph::new(todos_display)
         .block(
             Block::default()
-                .title(" [2] TODOs ")
+                .title(" TODOs ")
                 .borders(Borders::ALL)
                 .border_style(border_style)
                 .style(Style::default().bg(tc.background)),

@@ -41,31 +41,16 @@ pub fn handle_key_event(app: &mut App, conn: &rusqlite::Connection, key: KeyEven
             return Ok(false);
         }
         KeyCode::Char('1') => {
-            if app.active_tab == Tab::Dashboard {
-                app.focused_panel_idx = Some(0);
-            } else {
-                app.active_tab = Tab::Dashboard;
-                app.focused_panel_idx = None;
-            }
+            app.active_tab = Tab::Dashboard;
             return Ok(false);
         }
         KeyCode::Char('2') => {
-            if app.active_tab == Tab::Dashboard {
-                app.focused_panel_idx = Some(1);
-            } else {
-                app.active_tab = Tab::Log;
-                app.focused_panel_idx = None;
-                app.load_log(conn)?;
-            }
+            app.active_tab = Tab::Log;
+            app.load_log(conn)?;
             return Ok(false);
         }
         KeyCode::Char('3') => {
-            if app.active_tab == Tab::Dashboard {
-                app.focused_panel_idx = Some(2);
-            } else {
-                app.active_tab = Tab::Settings;
-                app.focused_panel_idx = None;
-            }
+            app.active_tab = Tab::Settings;
             return Ok(false);
         }
         // Letter-based tab shortcuts
@@ -73,20 +58,17 @@ pub fn handle_key_event(app: &mut App, conn: &rusqlite::Connection, key: KeyEven
             // In vim mode on Dashboard, 'd' starts 'dd' (delete) — let tab handler process it
             if !(app.config.vim_mode && app.active_tab == Tab::Dashboard) {
                 app.active_tab = Tab::Dashboard;
-                app.focused_panel_idx = None;
                 return Ok(false);
             }
             // Fall through to tab handler for vim 'dd'
         }
         KeyCode::Char('l') | KeyCode::Char('L') => {
             app.active_tab = Tab::Log;
-            app.focused_panel_idx = None;
             app.load_log(conn)?;
             return Ok(false);
         }
         KeyCode::Char('s') | KeyCode::Char('S') => {
             app.active_tab = Tab::Settings;
-            app.focused_panel_idx = None;
             return Ok(false);
         }
         KeyCode::Tab => {
@@ -95,7 +77,6 @@ pub fn handle_key_event(app: &mut App, conn: &rusqlite::Connection, key: KeyEven
                 Tab::Log => Tab::Settings,
                 Tab::Settings => Tab::Dashboard,
             };
-            app.focused_panel_idx = None;
             // Load data when switching to Log tab
             if app.active_tab == Tab::Log {
                 app.load_log(conn)?;
@@ -108,7 +89,6 @@ pub fn handle_key_event(app: &mut App, conn: &rusqlite::Connection, key: KeyEven
                 Tab::Log => Tab::Dashboard,
                 Tab::Settings => Tab::Log,
             };
-            app.focused_panel_idx = None;
             if app.active_tab == Tab::Log {
                 app.load_log(conn)?;
             }

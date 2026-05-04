@@ -12,15 +12,6 @@ use crate::tui::text_input::TextInput;
 // Re-export so existing callers (ui.rs) can use `app::VimInputMode`.
 pub use crate::tui::text_input::VimInputMode;
 
-// ── Time window ────────────────────────────────────────────────────────────────
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum TimeWindow {
-    Today,
-    CurrentWeek,
-    Last7Days,
-}
-
 // ── Message overlay ────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq)]
@@ -130,24 +121,6 @@ impl Overlay {
     }
 }
 
-// ── TimeWindow state ───────────────────────────────────────────────────────────
-
-pub fn window_to_idx(w: &TimeWindow) -> usize {
-    match w {
-        TimeWindow::Today => 0,
-        TimeWindow::CurrentWeek => 1,
-        TimeWindow::Last7Days => 2,
-    }
-}
-
-pub fn idx_to_window(idx: usize) -> TimeWindow {
-    match idx {
-        0 => TimeWindow::Today,
-        1 => TimeWindow::CurrentWeek,
-        _ => TimeWindow::Last7Days,
-    }
-}
-
 // ── App ────────────────────────────────────────────────────────────────────────
 
 pub struct App {
@@ -155,21 +128,15 @@ pub struct App {
     pub overlay: Overlay,
     pub log_selected: usize,
     pub config: AppConfig,
-    // Report state (legacy tab window — kept for backward compat with load_report)
-    pub report_window: TimeWindow,
-    pub report_selected_window: usize,
     // Log pagination (page stored in App now)
     pub log_page: usize,
     // Data fields
     pub active_session: Option<Session>,
-    pub today_summary: Vec<(Option<String>, i64)>,
     pub today_sessions: Vec<Session>,
     pub log_entries: Vec<Session>,
     pub log_total_pages: usize,
-    pub report_rows: Vec<(Option<String>, i64)>,
     pub message: Option<MessageOverlay>,
     pub quit_pending: bool,
-    pub terminal_too_small: bool,
     pub no_color: bool,
     /// Active Pomodoro timer (Some while a session is running in Pomodoro mode).
     pub pomodoro_timer: Option<PomodoroTimer>,
@@ -184,9 +151,6 @@ pub struct App {
     pub prompt_input: TextInput,
     // Keyboard handler for context-aware input routing
     pub keyboard_handler: KeyHandler,
-    /// Currently focused dashboard panel index (0=Timer/Pomodoro, 1=TODOs, 2=Report).
-    /// None means no panel is focused.
-    pub focused_panel_idx: Option<usize>,
     // Report panel metrics shown in Dashboard (replaces Today's Summary)
     pub report_metrics: ReportMetrics,
     /// Time the report_metrics were last computed (for 5-second cache).
@@ -217,18 +181,13 @@ impl App {
             overlay: Overlay::None,
             log_selected: 0,
             config,
-            report_window: TimeWindow::Today,
-            report_selected_window: 0,
             log_page: 0,
             active_session: None,
-            today_summary: Vec::new(),
             today_sessions: Vec::new(),
             log_entries: Vec::new(),
             log_total_pages: 1,
-            report_rows: Vec::new(),
             message: None,
             quit_pending: false,
-            terminal_too_small: false,
             no_color,
             pomodoro_timer: None,
             pomo_config: PomodoroConfig::default(),
@@ -237,7 +196,6 @@ impl App {
             selected_todo_idx: None,
             prompt_input: TextInput::new(vim_mode),
             keyboard_handler: KeyHandler::new(vim_mode),
-            focused_panel_idx: None,
             report_metrics: ReportMetrics::default(),
             report_metrics_cached_at: None,
             full_pomodoro_panel: false,
@@ -280,7 +238,6 @@ impl App {
         use crate::db::session_store;
 
         self.active_session = session_store::get_active_session(conn)?;
-        self.today_summary = session_store::aggregate_by_tag(conn, today_start())?;
         self.today_sessions = session_store::list_completed_since(conn, today_start())?;
         self.load_todos(conn)?;
         self.load_report_metrics(conn)?;
@@ -319,26 +276,6 @@ impl App {
         } else if self.log_selected >= page_entries {
             self.log_selected = page_entries - 1;
         }
-    }
-
-    /// Load report rows for the given time window.
-    pub fn load_report(
-        &mut self,
-        conn: &rusqlite::Connection,
-        window: &TimeWindow,
-    ) -> anyhow::Result<()> {
-        use crate::commands::report::{current_week_start, rolling_7d_start, today_start};
-        use crate::db::session_store;
-
-        let since = match window {
-            TimeWindow::Today => today_start(),
-            TimeWindow::CurrentWeek => current_week_start(),
-            TimeWindow::Last7Days => rolling_7d_start(),
-        };
-        self.report_rows = session_store::aggregate_by_tag(conn, since)?;
-        self.report_window = window.clone();
-        self.report_selected_window = window_to_idx(window);
-        Ok(())
     }
 
     /// Tick update for Dashboard tab (refreshes active session timer).

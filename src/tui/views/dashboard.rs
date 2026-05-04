@@ -53,25 +53,22 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
         ])
         .split(main_chunks[1]);
 
-    // Compute panel focus flags from app state
-    let panel_focused = |idx: usize| app.focused_panel_idx == Some(idx);
-
     // Render left panel: Pomodoro timer when active, generic timer for freeform, else idle panel
     if let Some(ref timer) = app.pomodoro_timer {
         crate::tui::views::pomodoro::render(frame, timer, app, main_chunks[0]);
     } else if app.active_session.is_some() {
         // Show Timer zone during active freeform session
-        crate::tui::ui::render_timer_zone(frame, main_chunks[0], app, panel_focused(0));
+        crate::tui::ui::render_timer_zone(frame, main_chunks[0], app);
     } else {
         // Show Pomodoro panel when idle (no active session)
-        crate::tui::ui::render_pomodoro_panel(frame, main_chunks[0], app, panel_focused(0));
+        crate::tui::ui::render_pomodoro_panel(frame, main_chunks[0], app);
     }
 
     // Render TODO zone (top-right)
-    crate::tui::ui::render_todo_zone(frame, right_chunks[0], app, panel_focused(1));
+    crate::tui::ui::render_todo_zone(frame, right_chunks[0], app);
 
     // Render Report panel (bottom-right)
-    crate::tui::ui::render_report_panel(frame, right_chunks[1], app, panel_focused(2));
+    crate::tui::ui::render_report_panel(frame, right_chunks[1], app);
 
     // Message overlay
     if let Some(msg) = &app.message {
