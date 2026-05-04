@@ -13,3 +13,5 @@
 
 # Feature specs (in-progress)
 specs/
+.opencode/**
+.claude/**

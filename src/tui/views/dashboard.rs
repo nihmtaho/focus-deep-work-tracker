@@ -1,143 +1,194 @@
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Block, Borders, Paragraph},
     Frame,
 };
 
-use crate::display::format::{format_duration, format_elapsed};
 use crate::tui::app::{App, MessageKind, MessageOverlay};
 
-pub fn render(frame: &mut Frame, app: &App, area: Rect) {
+pub fn render(frame: &mut Frame, app: &App, tc: &crate::theme::ThemeColors, area: Rect) {
+    // When full Pomodoro panel mode is active, show expanded view instead of 3-column layout
+    if app.full_pomodoro_panel {
+        render_full_pomodoro_panel(frame, app, tc, area);
+        if let Some(msg) = &app.message {
+            render_message_overlay(frame, app, tc, msg);
+        }
+        return;
+    }
+
+    // Three-zone layout for 008-dashboard-ui-enhancements:
+    // Top: Controls zone (hotkey legend)
+    // Middle: Panel zone (40% timer/pomodoro + 30% TODO + 30% Report)
+    // Uses flexible layout to accommodate report analytics
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(1)
         .constraints([
-            Constraint::Length(3), // title
-            Constraint::Length(5), // active session
-            Constraint::Min(5),    // today summary
-            Constraint::Length(3), // help bar
+            Constraint::Length(1), // controls/help
+            Constraint::Min(10),   // main panel area (timer + todo + report)
         ])
         .split(area);
 
-    // Title
-    let title = Paragraph::new(" focus — deep work tracker ")
-        .style(
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        )
-        .block(Block::default().borders(Borders::NONE));
-    frame.render_widget(title, chunks[0]);
+    // Render controls zone at top
+    crate::tui::ui::render_controls_zone(frame, chunks[0], app, tc);
 
-    // Active session block
-    let session_text = match &app.active_session {
-        Some(s) => {
-            let elapsed = format_elapsed(s.start_time);
-            let tag_str = s
-                .tag
-                .as_deref()
-                .map(|t| format!(" [{}]", t))
-                .unwrap_or_default();
-            vec![
-                Line::from(vec![
-                    Span::styled("  Task: ", Style::default().fg(Color::Yellow)),
-                    Span::raw(format!("{}{}", s.task, tag_str)),
-                ]),
-                Line::from(vec![
-                    Span::styled("  Elapsed: ", Style::default().fg(Color::Yellow)),
-                    Span::styled(
-                        elapsed,
-                        Style::default()
-                            .fg(Color::Green)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                ]),
-            ]
-        }
-        None => vec![Line::from(Span::styled(
-            "  No active session",
-            Style::default().fg(Color::DarkGray),
-        ))],
-    };
+    // Split main panel into two sections: left (40% timer/pomodoro), right (60% TODO + Report stacked)
+    let main_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(40), // Timer/Pomodoro panel
+            Constraint::Percentage(60), // TODO + Report stacked vertically
+        ])
+        .split(chunks[1]);
 
-    let session_block = Paragraph::new(session_text)
-        .block(
-            Block::default()
-                .title(" Active Session ")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Blue)),
-        )
-        .wrap(Wrap { trim: true });
-    frame.render_widget(session_block, chunks[1]);
+    // Split the right side vertically: TODO on top (fills), Report on bottom (fixed height)
+    let right_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Fill(1),    // TODO list (fills available space)
+            Constraint::Length(13), // Report panel (fixed height)
+        ])
+        .split(main_chunks[1]);
 
-    // Today summary — show individual session names
-    let summary_lines: Vec<Line> = if app.today_sessions.is_empty() {
-        vec![Line::from(Span::styled(
-            "  No sessions today.",
-            Style::default().fg(Color::DarkGray),
-        ))]
+    // Render left panel: Pomodoro timer when active, generic timer for freeform, else idle panel
+    if let Some(ref timer) = app.pomodoro_timer {
+        crate::tui::views::pomodoro::render(frame, timer, app, main_chunks[0]);
+    } else if app.active_session.is_some() {
+        // Show Timer zone during active freeform session
+        crate::tui::ui::render_timer_zone(frame, main_chunks[0], app, tc);
     } else {
-        let mut lines = Vec::new();
-        let mut total_secs: i64 = 0;
-        for session in &app.today_sessions {
-            let secs = session.duration().map(|d| d.num_seconds()).unwrap_or(0);
-            total_secs += secs;
-            let dur = format_duration(chrono::Duration::seconds(secs));
-            let tag_suffix = session
-                .tag
-                .as_deref()
-                .map(|t| format!(" [{}]", t))
-                .unwrap_or_default();
-            let label = format!("  {}{}", session.task, tag_suffix);
-            lines.push(Line::from(vec![
-                Span::styled(format!("{:<30}", label), Style::default().fg(Color::Cyan)),
-                Span::raw(dur),
-            ]));
-        }
-        lines.push(Line::from(vec![
-            Span::styled(
-                format!("  {:<30}", "TOTAL"),
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                format_duration(chrono::Duration::seconds(total_secs)),
-                Style::default().add_modifier(Modifier::BOLD),
-            ),
-        ]));
-        lines
-    };
+        // Show Pomodoro panel when idle (no active session)
+        crate::tui::ui::render_pomodoro_panel(frame, main_chunks[0], tc);
+    }
 
-    let summary_block = Paragraph::new(summary_lines)
-        .block(
-            Block::default()
-                .title(" Today's Summary ")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Blue)),
-        )
-        .wrap(Wrap { trim: true });
-    frame.render_widget(summary_block, chunks[2]);
+    // Render TODO zone (top-right)
+    crate::tui::ui::render_todo_zone(frame, right_chunks[0], app, tc);
 
-    // Help bar
-    let help = Paragraph::new(" [N] New  [S] Stop  [?] Help  [Q] Quit ")
-        .style(Style::default().fg(Color::DarkGray))
-        .block(Block::default().borders(Borders::NONE));
-    frame.render_widget(help, chunks[3]);
+    // Render Report panel (bottom-right)
+    crate::tui::ui::render_report_panel(frame, right_chunks[1], app, tc);
 
     // Message overlay
     if let Some(msg) = &app.message {
-        render_message_overlay(frame, app, msg);
+        render_message_overlay(frame, app, tc, msg);
     }
 }
 
-pub fn render_message_overlay_pub(frame: &mut Frame, app: &App, msg: &MessageOverlay) {
-    render_message_overlay(frame, app, msg);
+/// Render the full-screen Pomodoro panel (US11).
+///
+/// Draws a titled border then delegates the inner area to `pomodoro::render()`,
+/// which handles the vertically-centered clock, progress bar, and info panel.
+/// A compact stats row (cycles + elapsed) is shown in the bottom border footer.
+pub fn render_full_pomodoro_panel(
+    frame: &mut Frame,
+    app: &App,
+    tc: &crate::theme::ThemeColors,
+    area: Rect,
+) {
+    // Build the title with cycle count when a timer is active
+    let title = if let Some(ref timer) = app.pomodoro_timer {
+        let elapsed = crate::pomodoro::timer::format_secs(timer.total_elapsed_secs());
+        format!(
+            " Pomodoro  {}/{}  elapsed: {}  [F] collapse ",
+            timer.completed_work, timer.config.long_break_after, elapsed
+        )
+    } else {
+        " Pomodoro — Full View  [F] collapse ".to_string()
+    };
+
+    let outer = Block::default()
+        .title(title.as_str())
+        .borders(Borders::ALL)
+        .border_style(
+            Style::default()
+                .fg(tc.panel_focus_border)
+                .add_modifier(Modifier::BOLD),
+        )
+        .style(Style::default().bg(tc.background));
+    let inner = outer.inner(area);
+    frame.render_widget(outer, area);
+
+    if let Some(ref timer) = app.pomodoro_timer {
+        // Delegate the full inner area to the shared pomodoro renderer
+        crate::tui::views::pomodoro::render(frame, timer, app, inner);
+    } else {
+        // No active Pomodoro — show idle message
+        let idle_lines = vec![
+            Line::from(Span::raw("")),
+            Line::from(Span::styled(
+                "No Pomodoro session active",
+                Style::default()
+                    .fg(Color::DarkGray)
+                    .add_modifier(Modifier::ITALIC),
+            )),
+            Line::from(Span::raw("")),
+            Line::from(Span::styled(
+                "Start a new session from the Dashboard  [N] → Pomodoro mode",
+                Style::default().fg(Color::DarkGray),
+            )),
+        ];
+        let idle = Paragraph::new(idle_lines).alignment(Alignment::Center);
+        frame.render_widget(idle, inner);
+    }
 }
 
-fn render_message_overlay(frame: &mut Frame, app: &App, msg: &MessageOverlay) {
+// T136: Unit tests for full Pomodoro panel data logic
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_full_pomodoro_panel_toggle_default_off() {
+        use crate::config::AppConfig;
+        use crate::tui::app::App;
+        let app = App::new(false, AppConfig::default());
+        assert!(
+            !app.full_pomodoro_panel,
+            "full_pomodoro_panel must default to false"
+        );
+    }
+
+    #[test]
+    fn test_full_pomodoro_panel_toggle_on() {
+        use crate::config::AppConfig;
+        use crate::tui::app::App;
+        let mut app = App::new(false, AppConfig::default());
+        app.full_pomodoro_panel = true;
+        assert!(
+            app.full_pomodoro_panel,
+            "full_pomodoro_panel must be settable to true"
+        );
+    }
+
+    #[test]
+    fn test_full_pomodoro_panel_toggle_roundtrip() {
+        use crate::config::AppConfig;
+        use crate::tui::app::App;
+        let mut app = App::new(false, AppConfig::default());
+        app.full_pomodoro_panel = true;
+        app.full_pomodoro_panel = false;
+        assert!(
+            !app.full_pomodoro_panel,
+            "full_pomodoro_panel must be toggleable off"
+        );
+    }
+}
+
+pub fn render_message_overlay_pub(
+    frame: &mut Frame,
+    app: &App,
+    tc: &crate::theme::ThemeColors,
+    msg: &MessageOverlay,
+) {
+    render_message_overlay(frame, app, tc, msg);
+}
+
+fn render_message_overlay(
+    frame: &mut Frame,
+    app: &App,
+    tc: &crate::theme::ThemeColors,
+    msg: &MessageOverlay,
+) {
     use ratatui::layout::Rect;
 
     let area = frame.area();
@@ -163,9 +214,9 @@ fn render_message_overlay(frame: &mut Frame, app: &App, msg: &MessageOverlay) {
         )
     } else {
         match msg.kind {
-            MessageKind::Success => (Color::Green, " OK "),
-            MessageKind::Warning => (Color::Yellow, " WARN "),
-            MessageKind::Error => (Color::Red, " ERROR "),
+            MessageKind::Success => (tc.success, " OK "),
+            MessageKind::Warning => (tc.warning, " WARN "),
+            MessageKind::Error => (tc.error, " ERROR "),
         }
     };
 
@@ -174,7 +225,8 @@ fn render_message_overlay(frame: &mut Frame, app: &App, msg: &MessageOverlay) {
             Block::default()
                 .title(title)
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(fg)),
+                .border_style(Style::default().fg(fg))
+                .style(Style::default().bg(tc.background)),
         )
         .style(Style::default().fg(fg));
     frame.render_widget(overlay, overlay_area);

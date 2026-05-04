@@ -1,24 +1,22 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: 1.2.0 → 1.3.0
-Bump rationale: MINOR — Materially expanded Principle III and Principle V with
-  specific non-negotiable rules derived from bugs found in PR #4 code review
-  (lessons L001 and L002 in .specify/memory/lessons-learned.md).
+Version change: 1.3.0 → 1.3.1
+Bump rationale: PATCH — Clarified Principle VI (Commit Hygiene) to explicitly
+  prohibit Co-authored-by trailers from any AI implementation tool (including
+  GitHub Copilot) in both commits and pull requests.
 
 Modified principles:
-  - III. Structured Error Handling — added rule: persistence errors MUST be
-    surfaced to the user, never discarded with `let _ = result`
-  - V. Data Safety — added rule: DB mutations MUST be identified by stable primary
-    key, never by a value written in the same statement (e.g. timestamp join key)
+  - VI. Commit Hygiene — expanded to explicitly cover AI implementation tools
+    (e.g., GitHub Copilot) and PR descriptions, not only commit messages
 
 Added sections: none
 
 Removed sections: none
 
 Templates updated:
-  ✅ .specify/templates/plan-template.md — Updated constitution version reference
-     to v1.3.0; expanded gate questions for Principle III and Principle V
+  ⚠ .specify/templates/plan-template.md — may reference Principle VI; verify
+    no outdated wording
 
 Deferred TODOs: none
 -->
@@ -120,12 +118,21 @@ outright crash.
 
 ### VI. Commit Hygiene
 
-Commit messages MUST NOT include AI model attribution lines such as
-`Co-Authored-By: Claude <noreply@anthropic.com>` or any equivalent.
-Commits MUST be authored solely under the developer's identity.
+Commit messages and pull request descriptions MUST NOT include AI attribution
+trailers of any kind. This includes but is not limited to:
+
+- `Co-Authored-By: Claude <noreply@anthropic.com>`
+- `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`
+- Any equivalent trailer added by an AI coding assistant or implementation tool
+
+Commits MUST be authored solely under the developer's identity. AI tools that
+append `Co-authored-by` trailers automatically (e.g., GitHub Copilot CLI, Claude
+Code) MUST have that behavior disabled or the trailer removed before committing.
 
 **Rationale**: AI attribution in commit history creates ambiguity about code
-ownership, pollutes `git log`, and is not relevant to the repository's change record.
+ownership, pollutes `git log`, and is not relevant to the repository's change
+record. The developer is fully responsible for all committed code regardless of
+the tools used to produce it.
 
 ### VII. Pull Request Standards
 
@@ -201,4 +208,4 @@ This constitution supersedes all other project practices. Amendments require:
 5. PR Standard compliance (Principle VII) is enforced at merge time; all PRs MUST
    follow the title format, include spec/task links, and pass `cargo test` before merge
 
-**Version**: 1.3.0 | **Ratified**: 2026-04-02 | **Last Amended**: 2026-04-03
+**Version**: 1.3.1 | **Ratified**: 2026-04-02 | **Last Amended**: 2026-04-13

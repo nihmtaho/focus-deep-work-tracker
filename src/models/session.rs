@@ -9,6 +9,7 @@ pub struct Session {
     pub start_time: DateTime<Utc>,
     pub end_time: Option<DateTime<Utc>>,
     pub mode: String,
+    pub todo_id: Option<u64>, // Optional link to a TODO item
 }
 
 #[allow(dead_code)]
