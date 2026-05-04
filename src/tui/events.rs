@@ -565,53 +565,37 @@ pub fn handle_dashboard_tab(
 pub fn handle_log_tab(app: &mut App, conn: &rusqlite::Connection, key: KeyEvent) -> Result<bool> {
     let page_len = app.log_page_entries(app.log_page).len();
     match key.code {
-        KeyCode::Down => {
-            if page_len > 0 && app.log_selected < page_len - 1 {
-                app.log_selected += 1;
-            }
+        KeyCode::Down if page_len > 0 && app.log_selected < page_len - 1 => {
+            app.log_selected += 1;
         }
-        KeyCode::Up => {
-            if app.log_selected > 0 {
-                app.log_selected -= 1;
-            }
+        KeyCode::Up if app.log_selected > 0 => {
+            app.log_selected -= 1;
         }
-        KeyCode::Right | KeyCode::PageDown => {
-            if app.log_page + 1 < app.log_total_pages {
-                app.log_page += 1;
-                app.log_selected = 0;
-            }
+        KeyCode::Right | KeyCode::PageDown if app.log_page + 1 < app.log_total_pages => {
+            app.log_page += 1;
+            app.log_selected = 0;
         }
-        KeyCode::Left | KeyCode::PageUp => {
-            if app.log_page > 0 {
-                app.log_page -= 1;
-                app.log_selected = 0;
-            }
+        KeyCode::Left | KeyCode::PageUp if app.log_page > 0 => {
+            app.log_page -= 1;
+            app.log_selected = 0;
         }
-        KeyCode::Char('j') if app.config.vim_mode => {
-            if page_len > 0 && app.log_selected < page_len - 1 {
-                app.log_selected += 1;
-            }
+        KeyCode::Char('j') if app.config.vim_mode && page_len > 0 && app.log_selected < page_len - 1 => {
+            app.log_selected += 1;
         }
-        KeyCode::Char('k') if app.config.vim_mode => {
-            if app.log_selected > 0 {
-                app.log_selected -= 1;
-            }
+        KeyCode::Char('k') if app.config.vim_mode && app.log_selected > 0 => {
+            app.log_selected -= 1;
         }
         KeyCode::Char('g') if app.config.vim_mode => {
             app.log_selected = 0;
         }
-        KeyCode::Char('G') if app.config.vim_mode => {
-            if page_len > 0 {
-                app.log_selected = page_len - 1;
-            }
+        KeyCode::Char('G') if app.config.vim_mode && page_len > 0 => {
+            app.log_selected = page_len - 1;
         }
-        KeyCode::Char('r') | KeyCode::Char('R') => {
-            if page_len > 0 {
-                let session = &app.log_page_entries(app.log_page)[app.log_selected];
-                let task = session.task.clone();
-                let id = session.id;
-                app.open_prompt("Rename session:", &task, PromptAction::RenameSession { id });
-            }
+        KeyCode::Char('r') | KeyCode::Char('R') if page_len > 0 => {
+            let session = &app.log_page_entries(app.log_page)[app.log_selected];
+            let task = session.task.clone();
+            let id = session.id;
+            app.open_prompt("Rename session:", &task, PromptAction::RenameSession { id });
         }
         _ => {}
     }
@@ -625,15 +609,13 @@ pub fn handle_settings_tab(app: &mut App, key: KeyEvent) -> Result<bool> {
 
     match key.code {
         // Navigation
-        KeyCode::Up | KeyCode::Char('k') => {
-            if app.settings_selected > 0 {
-                app.settings_selected -= 1;
-            }
+        KeyCode::Up | KeyCode::Char('k') if app.settings_selected > 0 => {
+            app.settings_selected -= 1;
         }
-        KeyCode::Down | KeyCode::Char('j') => {
-            if app.settings_selected + 1 < SETTINGS_ROW_COUNT {
-                app.settings_selected += 1;
-            }
+        KeyCode::Down | KeyCode::Char('j')
+            if app.settings_selected + 1 < SETTINGS_ROW_COUNT =>
+        {
+            app.settings_selected += 1;
         }
 
         // Toggle vim mode (row 0, or 'V' always works)

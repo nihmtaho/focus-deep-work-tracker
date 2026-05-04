@@ -121,11 +121,7 @@ impl ReportMetrics {
                 |r| r.get(0),
             )
             .unwrap_or(0);
-        let completion_rate = if total_todos > 0 {
-            completed_todos * 100 / total_todos
-        } else {
-            0
-        };
+        let completion_rate = (completed_todos * 100).checked_div(total_todos).unwrap_or(0);
 
         // Focus streak: consecutive days (ending today) with ≥1 completed session
         let focus_streak_days = compute_focus_streak(conn);
