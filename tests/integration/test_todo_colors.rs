@@ -225,5 +225,3 @@ fn test_session_tags_graceful_when_no_tag() {
     let displayed = tag.as_deref().unwrap_or("—");
     assert_eq!(displayed, "—", "Missing tag must render as '—' placeholder");
 }
-
-
