@@ -68,19 +68,19 @@ pub fn render(frame: &mut Frame, app: &App) {
         ])
         .split(area);
 
-    render_tab_bar(frame, app, chunks[0]);
+    render_tab_bar(frame, app, &tc, chunks[0]);
 
     match &app.active_tab {
-        Tab::Dashboard => views::dashboard::render(frame, app, chunks[1]),
-        Tab::Log => views::log::render(frame, app, app.log_page, app.log_selected, chunks[1]),
-        Tab::Settings => views::settings::render(frame, app, chunks[1]),
+        Tab::Dashboard => views::dashboard::render(frame, app, &tc, chunks[1]),
+        Tab::Log => views::log::render(frame, app, &tc, app.log_page, app.log_selected, chunks[1]),
+        Tab::Settings => views::settings::render(frame, app, &tc, chunks[1]),
     }
 
-    render_status_bar(frame, app, chunks[2]);
+    render_status_bar(frame, app, &tc, chunks[2]);
 
     // Render overlay on top
     if app.overlay.is_active() {
-        render_overlay(frame, app, area);
+        render_overlay(frame, app, &tc, area);
     }
 
     // Render message notification if present (and no modal overlay)
@@ -91,8 +91,7 @@ pub fn render(frame: &mut Frame, app: &App) {
     }
 }
 
-fn render_tab_bar(frame: &mut Frame, app: &App, area: Rect) {
-    let tc = crate::tui::themes::get_colors_for_theme(app.config.theme.as_deref());
+fn render_tab_bar(frame: &mut Frame, app: &App, tc: &crate::theme::ThemeColors, area: Rect) {
     let tabs = [
         (Tab::Dashboard, "[d]Dashboard"),
         (Tab::Log, "[l]Log"),
@@ -127,10 +126,10 @@ fn render_tab_bar(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(bar, area);
 }
 
-fn render_overlay(frame: &mut Frame, app: &App, area: Rect) {
+fn render_overlay(frame: &mut Frame, app: &App, tc: &crate::theme::ThemeColors, area: Rect) {
     match &app.overlay {
         Overlay::Prompt { label, .. } => {
-            render_prompt_overlay(frame, app, label);
+            render_prompt_overlay(frame, app, tc, label);
         }
         Overlay::ConfirmDelete { session_name, .. } => {
             render_confirm_delete_overlay(frame, area, session_name);
@@ -165,8 +164,7 @@ fn centered_rect(percent_x: u16, height: u16, area: Rect) -> Rect {
     }
 }
 
-fn render_prompt_overlay(frame: &mut Frame, app: &App, label: &str) {
-    let tc = crate::tui::themes::get_colors_for_theme(app.config.theme.as_deref());
+fn render_prompt_overlay(frame: &mut Frame, app: &App, tc: &crate::theme::ThemeColors, label: &str) {
     let block_area = centered_rect(60, 7, frame.area());
     frame.render_widget(Clear, block_area);
 
@@ -385,8 +383,7 @@ fn render_message_overlay(
 
 /// Render the Pomodoro panel when idle, showing historical stats and start button.
 /// Displays total cycles, cumulative duration, focus streak, and last completion time.
-pub fn render_pomodoro_panel(frame: &mut Frame, area: Rect, app: &App) {
-    let tc = crate::tui::themes::get_colors_for_theme(app.config.theme.as_deref());
+pub fn render_pomodoro_panel(frame: &mut Frame, area: Rect, tc: &crate::theme::ThemeColors) {
     // For now, create an idle panel state as placeholder
     let panel_state = PomodoroPanelState::idle();
 
@@ -444,8 +441,7 @@ pub fn render_pomodoro_panel(frame: &mut Frame, area: Rect, app: &App) {
 
 /// Render the Report panel showing session analytics and productivity metrics.
 /// Displays: session counts, total duration, completion rate, focus streak, and productivity score.
-pub fn render_report_panel(frame: &mut Frame, area: Rect, app: &App) {
-    let tc = crate::tui::themes::get_colors_for_theme(app.config.theme.as_deref());
+pub fn render_report_panel(frame: &mut Frame, area: Rect, app: &App, tc: &crate::theme::ThemeColors) {
     let metrics = &app.report_metrics;
 
     let content = vec![
@@ -515,8 +511,7 @@ pub fn render_report_panel(frame: &mut Frame, area: Rect, app: &App) {
 /// Digit changes trigger a 6-frame / 300 ms opacity-fade using Unicode shade
 /// blocks (█ ▓ ▒ ░).  Colors: Yellow digits on #404040 dark-gray background.
 /// The clock is centered both horizontally and vertically inside the panel.
-pub fn render_timer_zone(frame: &mut Frame, area: Rect, app: &App) {
-    let tc = crate::tui::themes::get_colors_for_theme(app.config.theme.as_deref());
+pub fn render_timer_zone(frame: &mut Frame, area: Rect, app: &App, tc: &crate::theme::ThemeColors) {
 
     let border_style = Style::default().fg(tc.panel_border);
 
@@ -598,8 +593,7 @@ pub fn render_timer_zone(frame: &mut Frame, area: Rect, app: &App) {
 
 /// Render the TODO list zone displaying all todos with visual distinction
 /// for active vs completed items, using theme colors for each state.
-pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App) {
-    let tc = crate::tui::themes::get_colors_for_theme(app.config.theme.as_deref());
+pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App, tc: &crate::theme::ThemeColors) {
 
     let border_style = Style::default().fg(tc.panel_border);
 
@@ -667,8 +661,7 @@ pub fn render_todo_zone(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 /// Render the controls/help zone displaying available hotkeys.
-pub fn render_controls_zone(frame: &mut Frame, area: Rect, app: &App) {
-    let tc = crate::tui::themes::get_colors_for_theme(app.config.theme.as_deref());
+pub fn render_controls_zone(frame: &mut Frame, area: Rect, app: &App, tc: &crate::theme::ThemeColors) {
     let help_text = if app.pomodoro_timer.is_some() {
         " [p] pause/resume  [s] skip break  [+] extend  [q] stop Pomodoro "
     } else {
@@ -687,8 +680,7 @@ pub fn render_controls_zone(frame: &mut Frame, area: Rect, app: &App) {
 ///
 /// Left side: vim mode badge (highlighted when on, dimmed when off).
 /// Right side: context-aware shortcut hints for the current state.
-fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
-    let tc = crate::tui::themes::get_colors_for_theme(app.config.theme.as_deref());
+fn render_status_bar(frame: &mut Frame, app: &App, tc: &crate::theme::ThemeColors, area: Rect) {
 
     // ── Vim mode badge ────────────────────────────────────────────────────────
     let (vim_label, vim_style) = if app.config.vim_mode {

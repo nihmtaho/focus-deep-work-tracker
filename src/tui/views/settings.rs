@@ -7,13 +7,11 @@ use ratatui::{
 };
 
 use crate::tui::app::App;
-use crate::tui::themes::get_colors_for_theme;
 
 /// Number of settings rows (0=vim, 1=theme, 2=work, 3=break, 4=long_break, 5=long_break_after).
 pub const SETTINGS_ROW_COUNT: usize = 6;
 
-pub fn render(frame: &mut Frame, app: &App, area: Rect) {
-    let tc = get_colors_for_theme(app.config.theme.as_deref());
+pub fn render(frame: &mut Frame, app: &App, tc: &crate::theme::ThemeColors, area: Rect) {
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -130,7 +128,7 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(help, chunks[3]);
 
     if let Some(msg) = &app.message {
-        crate::tui::views::dashboard::render_message_overlay_pub(frame, app, msg);
+        crate::tui::views::dashboard::render_message_overlay_pub(frame, app, tc, msg);
     }
 }
 

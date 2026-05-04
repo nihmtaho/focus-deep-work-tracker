@@ -8,7 +8,6 @@ use ratatui::{
 
 use crate::display::format::format_duration;
 use crate::tui::app::{App, LOG_PAGE_SIZE};
-use crate::tui::themes::get_colors_for_theme;
 
 /// Format a session status as a short string.
 pub fn format_status(end_time: bool) -> &'static str {
@@ -37,7 +36,7 @@ pub fn responsive_column_widths(area_width: u16) -> [Constraint; 6] {
     ]
 }
 
-pub fn render(frame: &mut Frame, app: &App, page: usize, selected: usize, area: Rect) {
+pub fn render(frame: &mut Frame, app: &App, tc: &crate::theme::ThemeColors, page: usize, selected: usize, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(1)
@@ -48,8 +47,6 @@ pub fn render(frame: &mut Frame, app: &App, page: usize, selected: usize, area: 
             Constraint::Length(2), // help
         ])
         .split(area);
-
-    let tc = get_colors_for_theme(app.config.theme.as_deref());
 
     // Title
     let total = app.log_entries.len();
@@ -179,7 +176,7 @@ pub fn render(frame: &mut Frame, app: &App, page: usize, selected: usize, area: 
 
     // Message overlay
     if let Some(msg) = &app.message {
-        crate::tui::views::dashboard::render_message_overlay_pub(frame, app, msg);
+        crate::tui::views::dashboard::render_message_overlay_pub(frame, app, tc, msg);
     }
 }
 
