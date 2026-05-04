@@ -286,7 +286,12 @@ impl TextInput {
             self.cursor_pos = 0;
             return;
         }
-        let last = self.buffer.char_indices().last().map(|(i, _)| i).unwrap_or(0);
+        let last = self
+            .buffer
+            .char_indices()
+            .last()
+            .map(|(i, _)| i)
+            .unwrap_or(0);
         if self.cursor_pos > last {
             self.cursor_pos = last;
         }
@@ -319,12 +324,20 @@ impl TextInput {
             self.cursor_pos = 0;
             return;
         }
-        self.cursor_pos = self.buffer.char_indices().last().map(|(i, _)| i).unwrap_or(0);
+        self.cursor_pos = self
+            .buffer
+            .char_indices()
+            .last()
+            .map(|(i, _)| i)
+            .unwrap_or(0);
     }
 
     fn word_forward(&mut self) {
         let chars: Vec<(usize, char)> = self.buffer.char_indices().collect();
-        let start = chars.iter().position(|&(i, _)| i == self.cursor_pos).unwrap_or(0);
+        let start = chars
+            .iter()
+            .position(|&(i, _)| i == self.cursor_pos)
+            .unwrap_or(0);
         let mut i = start;
         while i < chars.len() && !chars[i].1.is_whitespace() {
             i += 1;
@@ -370,8 +383,14 @@ mod tests {
     #[test]
     fn simple_type_and_submit() {
         let mut t = input(false);
-        assert!(matches!(t.handle_key(KeyCode::Char('h')), TextInputEvent::Continue));
-        assert!(matches!(t.handle_key(KeyCode::Char('i')), TextInputEvent::Continue));
+        assert!(matches!(
+            t.handle_key(KeyCode::Char('h')),
+            TextInputEvent::Continue
+        ));
+        assert!(matches!(
+            t.handle_key(KeyCode::Char('i')),
+            TextInputEvent::Continue
+        ));
         assert_eq!(t.buffer, "hi");
         assert!(matches!(t.handle_key(KeyCode::Enter), TextInputEvent::Submit(s) if s == "hi"));
     }

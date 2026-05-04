@@ -36,7 +36,14 @@ pub fn responsive_column_widths(area_width: u16) -> [Constraint; 6] {
     ]
 }
 
-pub fn render(frame: &mut Frame, app: &App, tc: &crate::theme::ThemeColors, page: usize, selected: usize, area: Rect) {
+pub fn render(
+    frame: &mut Frame,
+    app: &App,
+    tc: &crate::theme::ThemeColors,
+    page: usize,
+    selected: usize,
+    area: Rect,
+) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(1)
@@ -129,7 +136,12 @@ pub fn render(frame: &mut Frame, app: &App, tc: &crate::theme::ThemeColors, page
                     Cell::from(status).style(status_style),
                 ]);
                 if i == selected {
-                    row.style(Style::default().bg(tc.panel_border).fg(tc.background).add_modifier(Modifier::BOLD))
+                    row.style(
+                        Style::default()
+                            .bg(tc.panel_border)
+                            .fg(tc.background)
+                            .add_modifier(Modifier::BOLD),
+                    )
                 } else {
                     row
                 }

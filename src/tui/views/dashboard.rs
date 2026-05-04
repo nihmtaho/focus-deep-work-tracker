@@ -81,7 +81,12 @@ pub fn render(frame: &mut Frame, app: &App, tc: &crate::theme::ThemeColors, area
 /// Draws a titled border then delegates the inner area to `pomodoro::render()`,
 /// which handles the vertically-centered clock, progress bar, and info panel.
 /// A compact stats row (cycles + elapsed) is shown in the bottom border footer.
-pub fn render_full_pomodoro_panel(frame: &mut Frame, app: &App, tc: &crate::theme::ThemeColors, area: Rect) {
+pub fn render_full_pomodoro_panel(
+    frame: &mut Frame,
+    app: &App,
+    tc: &crate::theme::ThemeColors,
+    area: Rect,
+) {
     // Build the title with cycle count when a timer is active
     let title = if let Some(ref timer) = app.pomodoro_timer {
         let elapsed = crate::pomodoro::timer::format_secs(timer.total_elapsed_secs());
@@ -169,11 +174,21 @@ mod tests {
     }
 }
 
-pub fn render_message_overlay_pub(frame: &mut Frame, app: &App, tc: &crate::theme::ThemeColors, msg: &MessageOverlay) {
+pub fn render_message_overlay_pub(
+    frame: &mut Frame,
+    app: &App,
+    tc: &crate::theme::ThemeColors,
+    msg: &MessageOverlay,
+) {
     render_message_overlay(frame, app, tc, msg);
 }
 
-fn render_message_overlay(frame: &mut Frame, app: &App, tc: &crate::theme::ThemeColors, msg: &MessageOverlay) {
+fn render_message_overlay(
+    frame: &mut Frame,
+    app: &App,
+    tc: &crate::theme::ThemeColors,
+    msg: &MessageOverlay,
+) {
     use ratatui::layout::Rect;
 
     let area = frame.area();

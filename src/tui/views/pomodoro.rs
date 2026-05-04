@@ -103,8 +103,16 @@ pub fn render(frame: &mut Frame, timer: &PomodoroTimer, app: &App, area: Rect) {
     frame.render_widget(phase_widget, chunks[0]);
 
     // ── Clock (MM:SS big or plain) ────────────────────────────────────────────
-    let digit_color = if no_color { Color::Reset } else { Color::Yellow };
-    let clock_bg = if no_color { Color::Reset } else { Color::Rgb(64, 64, 64) };
+    let digit_color = if no_color {
+        Color::Reset
+    } else {
+        Color::Yellow
+    };
+    let clock_bg = if no_color {
+        Color::Reset
+    } else {
+        Color::Rgb(64, 64, 64)
+    };
     let countdown_lines: Vec<Line> = clock_rows
         .into_iter()
         .map(|row| {

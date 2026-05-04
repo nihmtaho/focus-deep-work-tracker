@@ -12,7 +12,6 @@ use crate::tui::app::App;
 pub const SETTINGS_ROW_COUNT: usize = 6;
 
 pub fn render(frame: &mut Frame, app: &App, tc: &crate::theme::ThemeColors, area: Rect) {
-
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(1)
@@ -55,7 +54,12 @@ pub fn render(frame: &mut Frame, app: &App, tc: &crate::theme::ThemeColors, area
         Some(other) => other,
     };
     let theme_label = format!("Theme:    [ {theme_name} ]");
-    let theme_style = row_style(theme_selected, app.config.theme.is_some(), app.no_color, &tc);
+    let theme_style = row_style(
+        theme_selected,
+        app.config.theme.is_some(),
+        app.no_color,
+        &tc,
+    );
 
     let general_content = Paragraph::new(vec![
         Line::from(Span::raw("")),
@@ -120,11 +124,9 @@ pub fn render(frame: &mut Frame, app: &App, tc: &crate::theme::ThemeColors, area
     frame.render_widget(pomo_block, chunks[2]);
 
     // ── Help bar ──────────────────────────────────────────────────────────────
-    let help = Paragraph::new(
-        " [↑/↓] Select   [+/-] Adjust / Cycle theme   [V] Toggle Vim Mode ",
-    )
-    .style(Style::default().fg(tc.panel_border).bg(tc.background))
-    .alignment(Alignment::Center);
+    let help = Paragraph::new(" [↑/↓] Select   [+/-] Adjust / Cycle theme   [V] Toggle Vim Mode ")
+        .style(Style::default().fg(tc.panel_border).bg(tc.background))
+        .alignment(Alignment::Center);
     frame.render_widget(help, chunks[3]);
 
     if let Some(msg) = &app.message {
@@ -132,16 +134,19 @@ pub fn render(frame: &mut Frame, app: &App, tc: &crate::theme::ThemeColors, area
     }
 }
 
-fn row_style(selected: bool, active: bool, no_color: bool, tc: &crate::theme::ThemeColors) -> Style {
+fn row_style(
+    selected: bool,
+    active: bool,
+    no_color: bool,
+    tc: &crate::theme::ThemeColors,
+) -> Style {
     if selected {
         Style::default()
             .fg(tc.background)
             .bg(tc.accent)
             .add_modifier(Modifier::BOLD)
     } else if active && !no_color {
-        Style::default()
-            .fg(tc.success)
-            .add_modifier(Modifier::BOLD)
+        Style::default().fg(tc.success).add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(tc.panel_border)
     }

@@ -32,7 +32,10 @@ mod tests {
         handle_todo_key(&mut app, &db, KeyCode::Char('a')).unwrap();
         assert!(matches!(
             app.overlay,
-            Overlay::Prompt { action: PromptAction::AddTodo, .. }
+            Overlay::Prompt {
+                action: PromptAction::AddTodo,
+                ..
+            }
         ));
     }
 

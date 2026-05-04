@@ -141,9 +141,9 @@ fn run_app(
 
         // Advance Pomodoro clock animation (MM:SS countdown)
         if let Some(ref timer) = app.pomodoro_timer {
-            let pomo_str = crate::tui::timer_display::TimerDisplay::new(
-                Duration::from_secs(timer.remaining_secs),
-            )
+            let pomo_str = crate::tui::timer_display::TimerDisplay::new(Duration::from_secs(
+                timer.remaining_secs,
+            ))
             .render_pomodoro();
             app.advance_pomo_clock_anim(&pomo_str);
         }

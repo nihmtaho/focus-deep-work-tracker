@@ -421,7 +421,11 @@ impl TimerDisplay {
     /// Map digit width to digit height.  All thick sizes ≥ 5 use a square
     /// (w×w) grid so digits scale proportionally at every tier.
     fn digit_height_for_width(w: u8) -> u8 {
-        if w >= 5 { w } else { 5 }
+        if w >= 5 {
+            w
+        } else {
+            5
+        }
     }
 
     /// Generate `height` rows of block-character pixels for a single character
@@ -439,7 +443,11 @@ impl TimerDisplay {
         let bar_h = (height / 10).max(1);
         // Internal horizontal gap — forced odd so left/right strokes are equal width
         let gap_raw = (width / 9).max(1);
-        let inner_gap = if gap_raw % 2 == 0 { gap_raw + 1 } else { gap_raw };
+        let inner_gap = if gap_raw % 2 == 0 {
+            gap_raw + 1
+        } else {
+            gap_raw
+        };
         // Vertical stroke width
         let stroke = (width - inner_gap) / 2;
 
@@ -449,14 +457,23 @@ impl TimerDisplay {
         let lower = inner_h - upper; // may be 1 more than upper when inner_h is odd
 
         // Row building blocks (all exactly `width` chars wide)
-        let full  = "█".repeat(width);
+        let full = "█".repeat(width);
         let blank = " ".repeat(width);
-        let sides = format!("{}{}{}", "█".repeat(stroke), " ".repeat(inner_gap), "█".repeat(stroke));
+        let sides = format!(
+            "{}{}{}",
+            "█".repeat(stroke),
+            " ".repeat(inner_gap),
+            "█".repeat(stroke)
+        );
         let right = format!("{}{}", " ".repeat(stroke + inner_gap), "█".repeat(stroke));
-        let left  = format!("{}{}", "█".repeat(stroke), " ".repeat(stroke + inner_gap));
+        let left = format!("{}{}", "█".repeat(stroke), " ".repeat(stroke + inner_gap));
 
         // Colon: full-width rows with a single centered dot
-        let cdot = format!("{}█{}", " ".repeat(width / 2), " ".repeat(width - width / 2 - 1));
+        let cdot = format!(
+            "{}█{}",
+            " ".repeat(width / 2),
+            " ".repeat(width - width / 2 - 1)
+        );
         let cblk = " ".repeat(width);
 
         let mut rows: Vec<String> = Vec::with_capacity(height);
@@ -464,72 +481,150 @@ impl TimerDisplay {
         match ch {
             // 0: open box (top bar + sides + bottom bar)
             '0' => {
-                for _ in 0..bar_h              { rows.push(full.clone()); }
-                for _ in 0..(height - 2*bar_h) { rows.push(sides.clone()); }
-                for _ in 0..bar_h              { rows.push(full.clone()); }
+                for _ in 0..bar_h {
+                    rows.push(full.clone());
+                }
+                for _ in 0..(height - 2 * bar_h) {
+                    rows.push(sides.clone());
+                }
+                for _ in 0..bar_h {
+                    rows.push(full.clone());
+                }
             }
             // 1: right-side vertical bar
             '1' => {
-                for _ in 0..height { rows.push(right.clone()); }
+                for _ in 0..height {
+                    rows.push(right.clone());
+                }
             }
             // 2: top-right, middle, bottom-left
             '2' => {
-                for _ in 0..bar_h { rows.push(full.clone()); }
-                for _ in 0..upper { rows.push(right.clone()); }
-                for _ in 0..bar_h { rows.push(full.clone()); }
-                for _ in 0..lower { rows.push(left.clone()); }
-                for _ in 0..bar_h { rows.push(full.clone()); }
+                for _ in 0..bar_h {
+                    rows.push(full.clone());
+                }
+                for _ in 0..upper {
+                    rows.push(right.clone());
+                }
+                for _ in 0..bar_h {
+                    rows.push(full.clone());
+                }
+                for _ in 0..lower {
+                    rows.push(left.clone());
+                }
+                for _ in 0..bar_h {
+                    rows.push(full.clone());
+                }
             }
             // 3: top-right, middle, bottom-right
             '3' => {
-                for _ in 0..bar_h { rows.push(full.clone()); }
-                for _ in 0..upper { rows.push(right.clone()); }
-                for _ in 0..bar_h { rows.push(full.clone()); }
-                for _ in 0..lower { rows.push(right.clone()); }
-                for _ in 0..bar_h { rows.push(full.clone()); }
+                for _ in 0..bar_h {
+                    rows.push(full.clone());
+                }
+                for _ in 0..upper {
+                    rows.push(right.clone());
+                }
+                for _ in 0..bar_h {
+                    rows.push(full.clone());
+                }
+                for _ in 0..lower {
+                    rows.push(right.clone());
+                }
+                for _ in 0..bar_h {
+                    rows.push(full.clone());
+                }
             }
             // 4: top-sides, middle bar, bottom-right (no outer top/bottom bar)
             '4' => {
-                for _ in 0..(upper + bar_h) { rows.push(sides.clone()); }
-                for _ in 0..bar_h           { rows.push(full.clone()); }
-                for _ in 0..(lower + bar_h) { rows.push(right.clone()); }
+                for _ in 0..(upper + bar_h) {
+                    rows.push(sides.clone());
+                }
+                for _ in 0..bar_h {
+                    rows.push(full.clone());
+                }
+                for _ in 0..(lower + bar_h) {
+                    rows.push(right.clone());
+                }
             }
             // 5: top-left, middle, bottom-right
             '5' => {
-                for _ in 0..bar_h { rows.push(full.clone()); }
-                for _ in 0..upper { rows.push(left.clone()); }
-                for _ in 0..bar_h { rows.push(full.clone()); }
-                for _ in 0..lower { rows.push(right.clone()); }
-                for _ in 0..bar_h { rows.push(full.clone()); }
+                for _ in 0..bar_h {
+                    rows.push(full.clone());
+                }
+                for _ in 0..upper {
+                    rows.push(left.clone());
+                }
+                for _ in 0..bar_h {
+                    rows.push(full.clone());
+                }
+                for _ in 0..lower {
+                    rows.push(right.clone());
+                }
+                for _ in 0..bar_h {
+                    rows.push(full.clone());
+                }
             }
             // 6: top-left, middle, bottom-sides
             '6' => {
-                for _ in 0..bar_h { rows.push(full.clone()); }
-                for _ in 0..upper { rows.push(left.clone()); }
-                for _ in 0..bar_h { rows.push(full.clone()); }
-                for _ in 0..lower { rows.push(sides.clone()); }
-                for _ in 0..bar_h { rows.push(full.clone()); }
+                for _ in 0..bar_h {
+                    rows.push(full.clone());
+                }
+                for _ in 0..upper {
+                    rows.push(left.clone());
+                }
+                for _ in 0..bar_h {
+                    rows.push(full.clone());
+                }
+                for _ in 0..lower {
+                    rows.push(sides.clone());
+                }
+                for _ in 0..bar_h {
+                    rows.push(full.clone());
+                }
             }
             // 7: top bar then right-side descent
             '7' => {
-                for _ in 0..bar_h      { rows.push(full.clone()); }
-                for _ in bar_h..height { rows.push(right.clone()); }
+                for _ in 0..bar_h {
+                    rows.push(full.clone());
+                }
+                for _ in bar_h..height {
+                    rows.push(right.clone());
+                }
             }
             // 8: full box with middle bar
             '8' => {
-                for _ in 0..bar_h { rows.push(full.clone()); }
-                for _ in 0..upper { rows.push(sides.clone()); }
-                for _ in 0..bar_h { rows.push(full.clone()); }
-                for _ in 0..lower { rows.push(sides.clone()); }
-                for _ in 0..bar_h { rows.push(full.clone()); }
+                for _ in 0..bar_h {
+                    rows.push(full.clone());
+                }
+                for _ in 0..upper {
+                    rows.push(sides.clone());
+                }
+                for _ in 0..bar_h {
+                    rows.push(full.clone());
+                }
+                for _ in 0..lower {
+                    rows.push(sides.clone());
+                }
+                for _ in 0..bar_h {
+                    rows.push(full.clone());
+                }
             }
             // 9: top-sides, middle, bottom-right
             '9' => {
-                for _ in 0..bar_h { rows.push(full.clone()); }
-                for _ in 0..upper { rows.push(sides.clone()); }
-                for _ in 0..bar_h { rows.push(full.clone()); }
-                for _ in 0..lower { rows.push(right.clone()); }
-                for _ in 0..bar_h { rows.push(full.clone()); }
+                for _ in 0..bar_h {
+                    rows.push(full.clone());
+                }
+                for _ in 0..upper {
+                    rows.push(sides.clone());
+                }
+                for _ in 0..bar_h {
+                    rows.push(full.clone());
+                }
+                for _ in 0..lower {
+                    rows.push(right.clone());
+                }
+                for _ in 0..bar_h {
+                    rows.push(full.clone());
+                }
             }
             // ':': two centered dots at ⅓ and ⅔ height
             ':' => {
@@ -542,7 +637,9 @@ impl TimerDisplay {
                 }
             }
             _ => {
-                for _ in 0..height { rows.push(blank.clone()); }
+                for _ in 0..height {
+                    rows.push(blank.clone());
+                }
             }
         }
 

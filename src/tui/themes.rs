@@ -70,5 +70,4 @@ mod tests {
             Theme::OneDark | Theme::Material | Theme::Light | Theme::Dark
         ));
     }
-
 }
